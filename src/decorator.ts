@@ -6,9 +6,6 @@ import * as vscode from 'vscode';
 // Group 3: everything after /// (may be undefined for bare /// lines)
 const docLineRegex = /^(\s*)(\/\/\/)(.*)?$/;
 
-// Matches backtick-wrapped inline code segments within doc text.
-const inlineCodeRegex = /`[^`]+`/g;
-
 // Matches "- Parameter name:" form (singular, with an explicit parameter name).
 // Groups: (prefix)(Parameter)(space)(name)(colon+space)(description)
 const singleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
@@ -29,14 +26,6 @@ const KNOWN_TAGS = new Set([
 // Captures leading whitespace from the text after ///.
 const leadingSpaceRegex = /^(\s+)/;
 
-// Matches bold text: **text** or __text__
-// Uses negative lookbehind to avoid matching escaped asterisks/underscores
-const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
-
-// Matches italic text: *text* or _text_
-// Uses negative lookbehind to avoid matching escaped asterisks/underscores
-const italicRegex = /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g;
-
 interface DocCommentSegments {
     slashRange: vscode.Range;
     indentRanges: vscode.Range[];
@@ -46,6 +35,31 @@ interface DocCommentSegments {
     boldRanges: vscode.Range[];
     italicRanges: vscode.Range[];
     boldItalicRanges: vscode.Range[];
+}
+
+interface InlineSegment {
+    lineNum: number;
+    startCol: number;
+    text: string;
+}
+
+interface DocBlockSegments {
+    slashRanges: vscode.Range[];
+    indentRanges: vscode.Range[];
+    textRanges: vscode.Range[];
+    codeRanges: vscode.Range[];
+    tagRanges: vscode.Range[];
+    boldRanges: vscode.Range[];
+    italicRanges: vscode.Range[];
+    boldItalicRanges: vscode.Range[];
+}
+
+type EmphasisKind = 'text' | 'bold' | 'italic' | 'boldItalic';
+
+interface EmphasisMarker {
+    marker: string;
+    addsBold: boolean;
+    addsItalic: boolean;
 }
 
 export class DocstringDecorator {
@@ -120,21 +134,35 @@ export class DocstringDecorator {
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
 
+        // Parse contiguous /// blocks so inline formatting (backticks/markdown emphasis)
+        // can continue across successive doc comment lines.
         for (let i = 0; i < document.lineCount; i++) {
-            const line = document.lineAt(i);
-            const segments = this.parseLine(line);
-            if (!segments) {
+            const firstLine = document.lineAt(i);
+            if (!docLineRegex.test(firstLine.text)) {
                 continue;
             }
 
-            slashRanges.push(segments.slashRange);
-            indentRanges.push(...segments.indentRanges);
-            textRanges.push(...segments.textRanges);
-            codeRanges.push(...segments.codeRanges);
-            tagRanges.push(...segments.tagRanges);
-            boldRanges.push(...segments.boldRanges);
-            italicRanges.push(...segments.italicRanges);
-            boldItalicRanges.push(...segments.boldItalicRanges);
+            const blockLines: vscode.TextLine[] = [];
+            for (let j = i; j < document.lineCount; j++) {
+                const line = document.lineAt(j);
+                if (!docLineRegex.test(line.text)) {
+                    break;
+                }
+                blockLines.push(line);
+            }
+
+            // Skip past the block (the outer loop will i++)
+            i += blockLines.length - 1;
+
+            const block = this.parseDocBlock(blockLines);
+            slashRanges.push(...block.slashRanges);
+            indentRanges.push(...block.indentRanges);
+            textRanges.push(...block.textRanges);
+            codeRanges.push(...block.codeRanges);
+            tagRanges.push(...block.tagRanges);
+            boldRanges.push(...block.boldRanges);
+            italicRanges.push(...block.italicRanges);
+            boldItalicRanges.push(...block.boldItalicRanges);
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
@@ -267,70 +295,82 @@ export class DocstringDecorator {
     // -- Private: Parsing --
 
     /**
-     * Parse a single line for /// doc comment segments.
-     * Returns null if the line is not a doc comment.
+     * Parse a contiguous block of /// doc comment lines.
      */
-    private parseLine(line: vscode.TextLine): DocCommentSegments | null {
-        const match = docLineRegex.exec(line.text);
-        if (!match) {
-            return null;
-        }
-
-        const lineNum = line.lineNumber;
-        const slashStart = match[1].length;
-        const slashEnd = slashStart + 3; // "///" is always 3 chars
-        const slashRange = new vscode.Range(lineNum, slashStart, lineNum, slashEnd);
-
+    private parseDocBlock(lines: vscode.TextLine[]): DocBlockSegments {
+        const slashRanges: vscode.Range[] = [];
         const indentRanges: vscode.Range[] = [];
-        const tempTextRanges: vscode.Range[] = [];
+        const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
-        const textRanges: vscode.Range[] = [];
 
-        const afterSlash = match[3];
-        if (!afterSlash || afterSlash.length === 0) {
-            return { slashRange, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
-        }
+        const inlineSegments: InlineSegment[] = [];
 
-        const contentStart = slashEnd; // absolute column where text after /// begins
+        for (const line of lines) {
+            const match = docLineRegex.exec(line.text);
+            if (!match) {
+                continue;
+            }
 
-        // Try to match doc tag patterns first (they handle their own indent ranges)
-        const tagParsed = this.tryParseDocTag(
-            afterSlash, lineNum, contentStart, indentRanges, tempTextRanges, codeRanges, tagRanges
-        );
+            const lineNum = line.lineNumber;
+            const slashStart = match[1].length;
+            const slashEnd = slashStart + 3; // "///" is always 3 chars
+            slashRanges.push(new vscode.Range(lineNum, slashStart, lineNum, slashEnd));
 
-        if (!tagParsed) {
-            // No tag -- peel off leading whitespace as monospace indent, then
-            // parse the rest for backticks
-            const lsMatch = leadingSpaceRegex.exec(afterSlash);
-            if (lsMatch) {
-                indentRanges.push(
-                    new vscode.Range(lineNum, contentStart, lineNum, contentStart + lsMatch[1].length)
-                );
-                const rest = afterSlash.substring(lsMatch[1].length);
-                if (rest.length > 0) {
-                    this.splitByBackticks(
-                        rest, lineNum, contentStart + lsMatch[1].length, tempTextRanges, codeRanges
+            const afterSlash = match[3] ?? '';
+            if (afterSlash.length === 0) {
+                continue;
+            }
+
+            const contentStart = slashEnd; // absolute column where text after /// begins
+
+            // Try to match doc tag patterns first (they handle their own indent ranges)
+            const tagParsed = this.tryParseDocTag(
+                afterSlash,
+                lineNum,
+                contentStart,
+                indentRanges,
+                codeRanges,
+                tagRanges,
+                inlineSegments,
+            );
+
+            if (!tagParsed) {
+                // No tag -- peel off leading whitespace as monospace indent, then
+                // scan the rest for multiline backticks/markdown.
+                const lsMatch = leadingSpaceRegex.exec(afterSlash);
+                if (lsMatch) {
+                    indentRanges.push(
+                        new vscode.Range(lineNum, contentStart, lineNum, contentStart + lsMatch[1].length)
                     );
+                    const rest = afterSlash.substring(lsMatch[1].length);
+                    if (rest.length > 0) {
+                        inlineSegments.push({
+                            lineNum,
+                            startCol: contentStart + lsMatch[1].length,
+                            text: rest,
+                        });
+                    }
+                } else {
+                    inlineSegments.push({ lineNum, startCol: contentStart, text: afterSlash });
                 }
-            } else {
-                this.splitByBackticks(afterSlash, lineNum, contentStart, tempTextRanges, codeRanges);
             }
         }
 
-        // Now split the text ranges into bold, italic, bold-italic, and plain text
-        // Pass code ranges so we can avoid formatting that overlaps with inline code
-        this.splitByMarkdownFormatting(tempTextRanges, lineNum, boldRanges, italicRanges, boldItalicRanges, textRanges, line.text, codeRanges);
+        // Inline segments are scanned as a single stream so formatting can continue
+        // across successive /// lines within the block.
+        this.tokenizeInlineSegments(inlineSegments, textRanges, codeRanges, boldRanges, italicRanges, boldItalicRanges);
 
-        return { slashRange, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
+        return { slashRanges, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
     }
 
     /**
      * Attempt to parse a doc tag pattern from the text after ///.
-     * Populates the provided range arrays and returns true if a tag was found.
+     * Populates the provided structural range arrays and returns true if a tag was found.
+     * Any tag description is emitted as an inline segment for block-aware scanning.
      *
      * Handles three forms:
      *   - Parameter name: description   (singular with explicit parameter name)
@@ -342,9 +382,9 @@ export class DocstringDecorator {
         lineNum: number,
         offset: number,
         indentRanges: vscode.Range[],
-        textRanges: vscode.Range[],
         codeRanges: vscode.Range[],
         tagRanges: vscode.Range[],
+        inlineSegments: InlineSegment[],
     ): boolean {
         // Form: "- Parameter name: description"
         const spMatch = singleParamRegex.exec(text);
@@ -372,9 +412,9 @@ export class DocstringDecorator {
             indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
             col += colon.length;
 
-            // description -> backtick-aware text
+            // description -> block-aware inline scanning
             if (description.length > 0) {
-                this.splitByBackticks(description, lineNum, col, textRanges, codeRanges);
+                inlineSegments.push({ lineNum, startCol: col, text: description });
             }
 
             return true;
@@ -404,9 +444,9 @@ export class DocstringDecorator {
             indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
             col += colon.length;
 
-            // description -> backtick-aware text
+            // description -> block-aware inline scanning
             if (description.length > 0) {
-                this.splitByBackticks(description, lineNum, col, textRanges, codeRanges);
+                inlineSegments.push({ lineNum, startCol: col, text: description });
             }
 
             return true;
@@ -416,204 +456,160 @@ export class DocstringDecorator {
     }
 
     /**
-     * Split a text segment into interleaved text (proportional) and code (monospace)
-     * ranges based on backtick-wrapped inline code spans.
+     * Tokenize inline doc text across a contiguous /// block, allowing backtick code and
+     * markdown emphasis to span multiple successive lines.
+     *
+     * Notes:
+     * - Backtick markers are styled as code (monospace), matching prior behavior.
+     * - Emphasis markers (*, **, ***, _, __) are left as plain text; only the content is styled.
+     * - Markdown is ignored inside backtick code spans.
      */
-    private splitByBackticks(
-        text: string,
-        lineNum: number,
-        offset: number,
+    private tokenizeInlineSegments(
+        segments: InlineSegment[],
         textRanges: vscode.Range[],
         codeRanges: vscode.Range[],
-    ): void {
-        const codeSpans: { start: number; end: number }[] = [];
-
-        inlineCodeRegex.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = inlineCodeRegex.exec(text)) !== null) {
-            codeSpans.push({ start: m.index, end: m.index + m[0].length });
-        }
-
-        if (codeSpans.length === 0) {
-            textRanges.push(new vscode.Range(lineNum, offset, lineNum, offset + text.length));
-            return;
-        }
-
-        let cursor = 0;
-        for (const span of codeSpans) {
-            if (span.start > cursor) {
-                textRanges.push(
-                    new vscode.Range(lineNum, offset + cursor, lineNum, offset + span.start)
-                );
-            }
-            codeRanges.push(
-                new vscode.Range(lineNum, offset + span.start, lineNum, offset + span.end)
-            );
-            cursor = span.end;
-        }
-
-        if (cursor < text.length) {
-            textRanges.push(
-                new vscode.Range(lineNum, offset + cursor, lineNum, offset + text.length)
-            );
-        }
-    }
-
-    /**
-     * Split text ranges into bold, italic, bold-italic, and plain text ranges.
-     * This should be called after splitByBackticks to avoid formatting inside code spans.
-     */
-    private splitByMarkdownFormatting(
-        textRanges: vscode.Range[],
-        lineNum: number,
         boldRanges: vscode.Range[],
         italicRanges: vscode.Range[],
         boldItalicRanges: vscode.Range[],
-        plainTextRanges: vscode.Range[],
-        lineText: string,
-        codeRanges: vscode.Range[],
     ): void {
-        // Helper to check if a range overlaps with any code span
-        const overlapsCode = (start: number, end: number): boolean => {
-            return codeRanges.some(codeRange => {
-                const codeStart = codeRange.start.character;
-                const codeEnd = codeRange.end.character;
-                // Check if the range overlaps with the code span
-                return !(end <= codeStart || start >= codeEnd);
+        let inBacktickCode = false;
+        const emphasisStack: EmphasisMarker[] = [];
+
+        const pushNonEmpty = (ranges: vscode.Range[], lineNum: number, startCol: number, endCol: number) => {
+            if (endCol > startCol) {
+                ranges.push(new vscode.Range(lineNum, startCol, lineNum, endCol));
+            }
+        };
+
+        const currentEmphasisKind = (): EmphasisKind => {
+            let bold = false;
+            let italic = false;
+            for (const m of emphasisStack) {
+                bold = bold || m.addsBold;
+                italic = italic || m.addsItalic;
+            }
+            if (bold && italic) return 'boldItalic';
+            if (bold) return 'bold';
+            if (italic) return 'italic';
+            return 'text';
+        };
+
+        const isEscapedAt = (text: string, index: number): boolean => {
+            // Treat an odd number of immediately preceding backslashes as escaping.
+            let backslashes = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                if (text[i] !== '\\') break;
+                backslashes++;
+            }
+            return backslashes % 2 === 1;
+        };
+
+        const matchEmphasisMarker = (text: string, index: number): { marker: string; length: number; addsBold: boolean; addsItalic: boolean } | null => {
+            const ch = text[index];
+            if (ch !== '*' && ch !== '_') return null;
+            if (isEscapedAt(text, index)) return null;
+
+            const maxLen = Math.min(3, text.length - index);
+            for (let len = maxLen; len >= 1; len--) {
+                const candidate = text.substring(index, index + len);
+                if (candidate.split('').every(c => c === ch)) {
+                    // Avoid treating underscores inside identifiers as emphasis, e.g. snake_case.
+                    // Heuristic: if both adjacent characters are alphanumeric, it's likely an identifier boundary.
+                    if (ch === '_') {
+                        const prev = index > 0 ? text[index - 1] : '';
+                        const next = index + len < text.length ? text[index + len] : '';
+                        const prevIsWord = /[A-Za-z0-9]/.test(prev);
+                        const nextIsWord = /[A-Za-z0-9]/.test(next);
+                        if (prevIsWord && nextIsWord) {
+                            return null;
+                        }
+                    }
+
+                    if (len === 3) return { marker: candidate, length: 3, addsBold: true, addsItalic: true };
+                    if (len === 2) return { marker: candidate, length: 2, addsBold: true, addsItalic: false };
+                    return { marker: candidate, length: 1, addsBold: false, addsItalic: true };
+                }
+            }
+            return null;
+        };
+
+        const toggleEmphasis = (marker: { marker: string; addsBold: boolean; addsItalic: boolean }) => {
+            const top = emphasisStack[emphasisStack.length - 1];
+            if (top && top.marker === marker.marker) {
+                emphasisStack.pop();
+                return;
+            }
+            emphasisStack.push({
+                marker: marker.marker,
+                addsBold: marker.addsBold,
+                addsItalic: marker.addsItalic,
             });
         };
-        for (const textRange of textRanges) {
-            const startCol = textRange.start.character;
-            const endCol = textRange.end.character;
-            // Extract the text for this range from the line text
-            const text = lineText.substring(startCol, endCol);
 
+        for (const seg of segments) {
+            const { lineNum, startCol, text } = seg;
             if (!text || text.length === 0) {
                 continue;
             }
 
-            // Find all formatting spans (bold, italic, and bold-italic)
-            interface FormatSpan {
-                start: number;
-                end: number;
-                type: 'bold' | 'italic' | 'bold-italic';
-            }
+            let i = 0;
+            let runStart = 0;
 
-            const formatSpans: FormatSpan[] = [];
+            const flushRun = (endExclusive: number) => {
+                if (endExclusive <= runStart) return;
 
-            // Find bold-italic first (***text***)
-            const boldItalicRegex = /\*\*\*(.+?)\*\*\*/g;
-            boldItalicRegex.lastIndex = 0;
-            let match: RegExpExecArray | null;
-            while ((match = boldItalicRegex.exec(text)) !== null) {
-                const absoluteStart = startCol + match.index;
-                const absoluteEnd = startCol + match.index + match[0].length;
+                const absStart = startCol + runStart;
+                const absEnd = startCol + endExclusive;
 
-                // Skip if this markdown span overlaps with any code span
-                if (!overlapsCode(absoluteStart, absoluteEnd)) {
-                    formatSpans.push({
-                        start: match.index + 3, // skip ***
-                        end: match.index + match[0].length - 3, // exclude trailing ***
-                        type: 'bold-italic'
-                    });
+                if (inBacktickCode) {
+                    pushNonEmpty(codeRanges, lineNum, absStart, absEnd);
+                    return;
                 }
-            }
 
-            // Find bold (**text** or __text__)
-            boldRegex.lastIndex = 0;
-            while ((match = boldRegex.exec(text)) !== null) {
-                const contentStart = match.index + 2; // skip ** or __
-                const contentEnd = match.index + match[0].length - 2; // exclude trailing ** or __
-                const absoluteStart = startCol + match.index;
-                const absoluteEnd = startCol + match.index + match[0].length;
+                const kind = currentEmphasisKind();
+                if (kind === 'boldItalic') pushNonEmpty(boldItalicRanges, lineNum, absStart, absEnd);
+                else if (kind === 'bold') pushNonEmpty(boldRanges, lineNum, absStart, absEnd);
+                else if (kind === 'italic') pushNonEmpty(italicRanges, lineNum, absStart, absEnd);
+                else pushNonEmpty(textRanges, lineNum, absStart, absEnd);
+            };
 
-                // Skip if this markdown span overlaps with any code span
-                if (overlapsCode(absoluteStart, absoluteEnd)) {
+            while (i < text.length) {
+                const ch = text[i];
+
+                if (ch === '`' && !isEscapedAt(text, i)) {
+                    // Flush content up to (but not including) the backtick.
+                    flushRun(i);
+
+                    // Style the backtick itself as code (monospace), matching prior behavior.
+                    pushNonEmpty(codeRanges, lineNum, startCol + i, startCol + i + 1);
+
+                    inBacktickCode = !inBacktickCode;
+                    i += 1;
+                    runStart = i;
                     continue;
                 }
 
-                // Check if this overlaps with a bold-italic span
-                const overlaps = formatSpans.some(span =>
-                    span.type === 'bold-italic' &&
-                    contentStart >= span.start - 3 && contentEnd <= span.end + 3
-                );
+                if (!inBacktickCode) {
+                    const marker = matchEmphasisMarker(text, i);
+                    if (marker) {
+                        // Flush content up to (but not including) the marker.
+                        flushRun(i);
 
-                if (!overlaps) {
-                    formatSpans.push({
-                        start: contentStart,
-                        end: contentEnd,
-                        type: 'bold'
-                    });
+                        // Leave the marker as plain text (proportional).
+                        pushNonEmpty(textRanges, lineNum, startCol + i, startCol + i + marker.length);
+
+                        toggleEmphasis(marker);
+                        i += marker.length;
+                        runStart = i;
+                        continue;
+                    }
                 }
+
+                i += 1;
             }
 
-            // Find italic (*text* or _text_)
-            italicRegex.lastIndex = 0;
-            while ((match = italicRegex.exec(text)) !== null) {
-                const contentGroup = match[1] || match[2]; // either * or _ group
-                if (!contentGroup) continue;
-
-                const contentStart = match.index + 1; // skip * or _
-                const contentEnd = match.index + match[0].length - 1; // exclude trailing * or _
-                const absoluteStart = startCol + match.index;
-                const absoluteEnd = startCol + match.index + match[0].length;
-
-                // Skip if this markdown span overlaps with any code span
-                if (overlapsCode(absoluteStart, absoluteEnd)) {
-                    continue;
-                }
-
-                // Check if this overlaps with a bold or bold-italic span
-                const overlaps = formatSpans.some(span =>
-                    (span.type === 'bold' || span.type === 'bold-italic') &&
-                    contentStart >= span.start - 2 && contentEnd <= span.end + 2
-                );
-
-                if (!overlaps) {
-                    formatSpans.push({
-                        start: contentStart,
-                        end: contentEnd,
-                        type: 'italic'
-                    });
-                }
-            }
-
-            // Sort spans by start position
-            formatSpans.sort((a, b) => a.start - b.start);
-
-            // Build ranges for formatted and plain text
-            let cursor = 0;
-            for (const span of formatSpans) {
-                // Plain text before this span
-                if (span.start > cursor) {
-                    plainTextRanges.push(
-                        new vscode.Range(lineNum, startCol + cursor, lineNum, startCol + span.start)
-                    );
-                }
-
-                // The formatted span (content only, excluding markers)
-                const spanRange = new vscode.Range(
-                    lineNum, startCol + span.start,
-                    lineNum, startCol + span.end
-                );
-
-                if (span.type === 'bold') {
-                    boldRanges.push(spanRange);
-                } else if (span.type === 'italic') {
-                    italicRanges.push(spanRange);
-                } else if (span.type === 'bold-italic') {
-                    boldItalicRanges.push(spanRange);
-                }
-
-                cursor = span.end;
-            }
-
-            // Remaining plain text
-            if (cursor < text.length) {
-                plainTextRanges.push(
-                    new vscode.Range(lineNum, startCol + cursor, lineNum, endCol)
-                );
-            }
+            flushRun(text.length);
         }
     }
+
 }
