@@ -55,6 +55,7 @@ interface DocBlockSegments {
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
     tagRanges: vscode.Range[];
+    markdownMarkerRanges: vscode.Range[];
     boldRanges: vscode.Range[];
     italicRanges: vscode.Range[];
     boldItalicRanges: vscode.Range[];
@@ -74,6 +75,7 @@ export class DocstringDecorator {
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
     private tagDecoration: vscode.TextEditorDecorationType;
+    private markdownMarkerDecoration: vscode.TextEditorDecorationType;
     private boldDecoration: vscode.TextEditorDecorationType;
     private italicDecoration: vscode.TextEditorDecorationType;
     private boldItalicDecoration: vscode.TextEditorDecorationType;
@@ -87,6 +89,7 @@ export class DocstringDecorator {
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
+        this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
@@ -102,6 +105,7 @@ export class DocstringDecorator {
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
+        this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
@@ -114,6 +118,7 @@ export class DocstringDecorator {
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
+        this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
@@ -142,6 +147,7 @@ export class DocstringDecorator {
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
+        const markdownMarkerRanges: vscode.Range[] = [];
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
@@ -173,6 +179,7 @@ export class DocstringDecorator {
             textRanges.push(...block.textRanges);
             codeRanges.push(...block.codeRanges);
             tagRanges.push(...block.tagRanges);
+            markdownMarkerRanges.push(...block.markdownMarkerRanges);
             boldRanges.push(...block.boldRanges);
             italicRanges.push(...block.italicRanges);
             boldItalicRanges.push(...block.boldItalicRanges);
@@ -183,6 +190,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
         editor.setDecorations(this.tagDecoration, tagRanges);
+        editor.setDecorations(this.markdownMarkerDecoration, markdownMarkerRanges);
         editor.setDecorations(this.boldDecoration, boldRanges);
         editor.setDecorations(this.italicDecoration, italicRanges);
         editor.setDecorations(this.boldItalicDecoration, boldItalicRanges);
@@ -214,6 +222,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
         editor.setDecorations(this.tagDecoration, []);
+        editor.setDecorations(this.markdownMarkerDecoration, []);
         editor.setDecorations(this.boldDecoration, []);
         editor.setDecorations(this.italicDecoration, []);
         editor.setDecorations(this.boldItalicDecoration, []);
@@ -229,6 +238,7 @@ export class DocstringDecorator {
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
+        this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
@@ -286,6 +296,12 @@ export class DocstringDecorator {
             ...(tagColor ? { color: tagColor } : {}),
         });
 
+        // Markdown delimiter characters (e.g. *, _, backticks) should remain monospace and
+        // inherit the theme's comment color, but appear slightly dimmer like Xcode.
+        const markdownMarkerDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; opacity: 0.5',
+        });
+
         // Bold text with proportional font
         let boldCss = `none; font-family: ${fontFamily}; font-style: normal; font-weight: bold`;
         if (fontSize) {
@@ -321,7 +337,7 @@ export class DocstringDecorator {
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
+        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
     }
 
     // -- Private: Parsing --
@@ -335,6 +351,7 @@ export class DocstringDecorator {
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
+        const markdownMarkerRanges: vscode.Range[] = [];
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
@@ -394,9 +411,27 @@ export class DocstringDecorator {
 
         // Inline segments are scanned as a single stream so formatting can continue
         // across successive /// lines within the block.
-        this.tokenizeInlineSegments(inlineSegments, textRanges, codeRanges, boldRanges, italicRanges, boldItalicRanges);
+        this.tokenizeInlineSegments(
+            inlineSegments,
+            textRanges,
+            codeRanges,
+            markdownMarkerRanges,
+            boldRanges,
+            italicRanges,
+            boldItalicRanges
+        );
 
-        return { slashRanges, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
+        return {
+            slashRanges,
+            indentRanges,
+            textRanges,
+            codeRanges,
+            tagRanges,
+            markdownMarkerRanges,
+            boldRanges,
+            italicRanges,
+            boldItalicRanges,
+        };
     }
 
     /**
@@ -492,14 +527,16 @@ export class DocstringDecorator {
      * markdown emphasis to span multiple successive lines.
      *
      * Notes:
-     * - Backtick markers are styled as code (monospace), matching prior behavior.
-     * - Emphasis markers (*, **, ***, _, __) are left as plain text; only the content is styled.
+     * - Backtick markers are not decorated; only the inner code is styled as code (monospace).
+     * - Emphasis markers (*, **, ***, _, __) are not decorated; only the content is styled.
+     * - Markdown delimiter characters are dimmed slightly and kept monospace.
      * - Markdown is ignored inside backtick code spans.
      */
     private tokenizeInlineSegments(
         segments: InlineSegment[],
         textRanges: vscode.Range[],
         codeRanges: vscode.Range[],
+        markdownMarkerRanges: vscode.Range[],
         boldRanges: vscode.Range[],
         italicRanges: vscode.Range[],
         boldItalicRanges: vscode.Range[],
@@ -612,8 +649,8 @@ export class DocstringDecorator {
                     // Flush content up to (but not including) the backtick.
                     flushRun(i);
 
-                    // Style the backtick itself as code (monospace), matching prior behavior.
-                    pushNonEmpty(codeRanges, lineNum, startCol + i, startCol + i + 1);
+                    // Dim and keep monospace for the delimiter itself (Xcode-like).
+                    pushNonEmpty(markdownMarkerRanges, lineNum, startCol + i, startCol + i + 1);
 
                     inBacktickCode = !inBacktickCode;
                     i += 1;
@@ -627,8 +664,8 @@ export class DocstringDecorator {
                         // Flush content up to (but not including) the marker.
                         flushRun(i);
 
-                        // Leave the marker as plain text (proportional).
-                        pushNonEmpty(textRanges, lineNum, startCol + i, startCol + i + marker.length);
+                        // Dim and keep monospace for the delimiter itself (Xcode-like).
+                        pushNonEmpty(markdownMarkerRanges, lineNum, startCol + i, startCol + i + marker.length);
 
                         toggleEmphasis(marker);
                         i += marker.length;
