@@ -1,0 +1,56 @@
+{
+  "name": "swift-docstrings",
+  "displayName": "Swift Docstrings",
+  "description": "Xcode-style proportional font rendering for Swift /// doc comments",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.105.1"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:swift"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Swift Docstrings",
+      "properties": {
+        "swiftDocstrings.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Xcode-style proportional font rendering for /// doc comments."
+        },
+        "swiftDocstrings.fontFamily": {
+          "type": "string",
+          "default": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+          "description": "Font family for doc comment text. Use a proportional/sans-serif font for the Xcode look."
+        },
+        "swiftDocstrings.fontSize": {
+          "type": "string",
+          "default": "",
+          "description": "Optional font size override for doc comment text (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.105.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
