@@ -255,7 +255,6 @@ export class DocstringDecorator {
         });
 
         // Bold text with proportional font
-        const boldColor = config.get<string>('boldColor', '') || undefined;
         let boldCss = `none; font-family: ${fontFamily}; font-style: normal; font-weight: bold`;
         if (fontSize) {
             boldCss += `; font-size: ${fontSize}`;
@@ -263,11 +262,9 @@ export class DocstringDecorator {
 
         const boldDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: boldCss,
-            ...(boldColor ? { color: boldColor } : {}),
         });
 
         // Italic text with proportional font
-        const italicColor = config.get<string>('italicColor', '') || undefined;
         let italicCss = `none; font-family: ${fontFamily}; font-style: italic`;
         if (fontSize) {
             italicCss += `; font-size: ${fontSize}`;
@@ -275,7 +272,6 @@ export class DocstringDecorator {
 
         const italicDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: italicCss,
-            ...(italicColor ? { color: italicColor } : {}),
         });
 
         // Bold italic text with proportional font
@@ -286,7 +282,6 @@ export class DocstringDecorator {
 
         const boldItalicDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: boldItalicCss,
-            ...(boldColor || italicColor ? { color: boldColor || italicColor } : {}),
         });
 
         return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, boldDeco, italicDeco, boldItalicDeco };

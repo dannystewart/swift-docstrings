@@ -46,16 +46,6 @@
           "type": "string",
           "default": "",
           "description": "Color for doc tag keywords (Parameters, Returns, Throws, etc.). Accepts any CSS color value. Leave empty to inherit the doc comment color."
-        },
-        "swiftDocstrings.boldColor": {
-          "type": "string",
-          "default": "",
-          "description": "Color for bold text. Accepts any CSS color value. Leave empty to inherit the doc comment color."
-        },
-        "swiftDocstrings.italicColor": {
-          "type": "string",
-          "default": "",
-          "description": "Color for italic text. Accepts any CSS color value. Leave empty to inherit the doc comment color."
         }
       }
     }
