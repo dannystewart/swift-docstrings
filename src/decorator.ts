@@ -26,8 +26,12 @@ const KNOWN_TAGS = new Set([
     'version', 'warning',
 ]);
 
+// Captures leading whitespace from the text after ///.
+const leadingSpaceRegex = /^(\s+)/;
+
 interface DocCommentSegments {
     slashRange: vscode.Range;
+    indentRanges: vscode.Range[];
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
     tagRanges: vscode.Range[];
@@ -35,6 +39,7 @@ interface DocCommentSegments {
 
 export class DocstringDecorator {
     private slashDecoration: vscode.TextEditorDecorationType;
+    private indentDecoration: vscode.TextEditorDecorationType;
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
     private tagDecoration: vscode.TextEditorDecorationType;
@@ -43,6 +48,7 @@ export class DocstringDecorator {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
         const types = this.buildDecorationTypes(config);
         this.slashDecoration = types.slashDeco;
+        this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
@@ -53,6 +59,7 @@ export class DocstringDecorator {
      */
     rebuildDecorations(): void {
         this.slashDecoration.dispose();
+        this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
@@ -60,6 +67,7 @@ export class DocstringDecorator {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
         const types = this.buildDecorationTypes(config);
         this.slashDecoration = types.slashDeco;
+        this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
@@ -81,6 +89,7 @@ export class DocstringDecorator {
         }
 
         const slashRanges: vscode.Range[] = [];
+        const indentRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
@@ -93,12 +102,14 @@ export class DocstringDecorator {
             }
 
             slashRanges.push(segments.slashRange);
+            indentRanges.push(...segments.indentRanges);
             textRanges.push(...segments.textRanges);
             codeRanges.push(...segments.codeRanges);
             tagRanges.push(...segments.tagRanges);
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
+        editor.setDecorations(this.indentDecoration, indentRanges);
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
         editor.setDecorations(this.tagDecoration, tagRanges);
@@ -109,6 +120,7 @@ export class DocstringDecorator {
      */
     clearDecorations(editor: vscode.TextEditor): void {
         editor.setDecorations(this.slashDecoration, []);
+        editor.setDecorations(this.indentDecoration, []);
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
         editor.setDecorations(this.tagDecoration, []);
@@ -119,6 +131,7 @@ export class DocstringDecorator {
      */
     dispose(): void {
         this.slashDecoration.dispose();
+        this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
@@ -144,6 +157,12 @@ export class DocstringDecorator {
             fontStyle: 'normal',
         });
 
+        // Monospace with no color override -- keeps structural whitespace, dashes,
+        // and colons aligned while inheriting the theme's doc comment color.
+        const indentDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
+        });
+
         const textDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: textCss,
         });
@@ -167,7 +186,7 @@ export class DocstringDecorator {
             color: codeColor,
         });
 
-        return { slashDeco, textDeco, codeDeco, tagDeco };
+        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco };
     }
 
     // -- Private: Parsing --
@@ -187,28 +206,43 @@ export class DocstringDecorator {
         const slashEnd = slashStart + 3; // "///" is always 3 chars
         const slashRange = new vscode.Range(lineNum, slashStart, lineNum, slashEnd);
 
+        const indentRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
 
         const afterSlash = match[3];
         if (!afterSlash || afterSlash.length === 0) {
-            return { slashRange, textRanges, codeRanges, tagRanges };
+            return { slashRange, indentRanges, textRanges, codeRanges, tagRanges };
         }
 
         const contentStart = slashEnd; // absolute column where text after /// begins
 
-        // Try to match doc tag patterns first
+        // Try to match doc tag patterns first (they handle their own indent ranges)
         const tagParsed = this.tryParseDocTag(
-            afterSlash, lineNum, contentStart, textRanges, codeRanges, tagRanges
+            afterSlash, lineNum, contentStart, indentRanges, textRanges, codeRanges, tagRanges
         );
 
         if (!tagParsed) {
-            // No tag -- parse the entire text for backticks
-            this.splitByBackticks(afterSlash, lineNum, contentStart, textRanges, codeRanges);
+            // No tag -- peel off leading whitespace as monospace indent, then
+            // parse the rest for backticks
+            const lsMatch = leadingSpaceRegex.exec(afterSlash);
+            if (lsMatch) {
+                indentRanges.push(
+                    new vscode.Range(lineNum, contentStart, lineNum, contentStart + lsMatch[1].length)
+                );
+                const rest = afterSlash.substring(lsMatch[1].length);
+                if (rest.length > 0) {
+                    this.splitByBackticks(
+                        rest, lineNum, contentStart + lsMatch[1].length, textRanges, codeRanges
+                    );
+                }
+            } else {
+                this.splitByBackticks(afterSlash, lineNum, contentStart, textRanges, codeRanges);
+            }
         }
 
-        return { slashRange, textRanges, codeRanges, tagRanges };
+        return { slashRange, indentRanges, textRanges, codeRanges, tagRanges };
     }
 
     /**
@@ -224,6 +258,7 @@ export class DocstringDecorator {
         text: string,
         lineNum: number,
         offset: number,
+        indentRanges: vscode.Range[],
         textRanges: vscode.Range[],
         codeRanges: vscode.Range[],
         tagRanges: vscode.Range[],
@@ -234,24 +269,24 @@ export class DocstringDecorator {
             const [, prefix, keyword, space, name, colon, description] = spMatch;
             let col = offset;
 
-            // "  - " prefix -> text
-            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
+            // "  - " prefix -> indent (monospace for alignment)
+            indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
             col += prefix.length;
 
             // "Parameter" -> tag (bold)
             tagRanges.push(new vscode.Range(lineNum, col, lineNum, col + keyword.length));
             col += keyword.length;
 
-            // space between keyword and name -> text
-            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + space.length));
+            // space between keyword and name -> indent (monospace)
+            indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + space.length));
             col += space.length;
 
             // parameter name -> code (monospace)
             codeRanges.push(new vscode.Range(lineNum, col, lineNum, col + name.length));
             col += name.length;
 
-            // ": " -> text
-            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
+            // ": " -> indent (monospace for alignment)
+            indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
             col += colon.length;
 
             // description -> backtick-aware text
@@ -269,8 +304,8 @@ export class DocstringDecorator {
             const isKnownTag = KNOWN_TAGS.has(word.toLowerCase());
             let col = offset;
 
-            // "  - " prefix -> text
-            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
+            // "  - " prefix -> indent (monospace for alignment)
+            indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
             col += prefix.length;
 
             if (isKnownTag) {
@@ -282,8 +317,8 @@ export class DocstringDecorator {
             }
             col += word.length;
 
-            // ": " -> text
-            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
+            // ": " -> indent (monospace for alignment)
+            indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
             col += colon.length;
 
             // description -> backtick-aware text
