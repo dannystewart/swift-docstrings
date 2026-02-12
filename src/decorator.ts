@@ -181,9 +181,11 @@ export class DocstringDecorator {
             tagCss += `; font-size: ${fontSize}`;
         }
 
+        const tagColor = config.get<string>('tagColor', '') || undefined;
+
         const tagDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: tagCss,
-            ...(codeColor ? { color: codeColor } : {}),
+            ...(tagColor ? { color: tagColor } : {}),
         });
 
         return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco };
