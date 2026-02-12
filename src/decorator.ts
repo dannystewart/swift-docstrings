@@ -167,7 +167,7 @@ export class DocstringDecorator {
             textDecoration: textCss,
         });
 
-        const codeColor = new vscode.ThemeColor('editorLineNumber.activeForeground');
+        const codeColor = config.get<string>('codeColor', '#8085a3');
 
         const codeDeco = vscode.window.createTextEditorDecorationType({
             // Restore monospace for inline code -- use the editor's own font

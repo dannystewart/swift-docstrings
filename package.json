@@ -31,6 +31,11 @@
           "type": "string",
           "default": "",
           "description": "Optional font size override for doc comment text (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
+        },
+        "swiftDocstrings.codeColor": {
+          "type": "string",
+          "default": "#8085a3",
+          "description": "Color for inline code and doc tag keywords (e.g. Parameters, Returns). Accepts any CSS color value."
         }
       }
     }
