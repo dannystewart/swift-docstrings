@@ -322,7 +322,8 @@ export class DocstringDecorator {
         }
 
         // Now split the text ranges into bold, italic, bold-italic, and plain text
-        this.splitByMarkdownFormatting(tempTextRanges, lineNum, boldRanges, italicRanges, boldItalicRanges, textRanges, line.text);
+        // Pass code ranges so we can avoid formatting that overlaps with inline code
+        this.splitByMarkdownFormatting(tempTextRanges, lineNum, boldRanges, italicRanges, boldItalicRanges, textRanges, line.text, codeRanges);
 
         return { slashRange, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
     }
@@ -333,8 +334,8 @@ export class DocstringDecorator {
      *
      * Handles three forms:
      *   - Parameter name: description   (singular with explicit parameter name)
-     *   - KnownTag: description          (section header like Returns, Throws, etc.)
-     *   - unknownWord: description        (assumed to be a parameter name)
+     *   - KnownTag: description         (section header like Returns, Throws, etc.)
+     *   - unknownWord: description      (assumed to be a parameter name)
      */
     private tryParseDocTag(
         text: string,
@@ -470,7 +471,17 @@ export class DocstringDecorator {
         boldItalicRanges: vscode.Range[],
         plainTextRanges: vscode.Range[],
         lineText: string,
+        codeRanges: vscode.Range[],
     ): void {
+        // Helper to check if a range overlaps with any code span
+        const overlapsCode = (start: number, end: number): boolean => {
+            return codeRanges.some(codeRange => {
+                const codeStart = codeRange.start.character;
+                const codeEnd = codeRange.end.character;
+                // Check if the range overlaps with the code span
+                return !(end <= codeStart || start >= codeEnd);
+            });
+        };
         for (const textRange of textRanges) {
             const startCol = textRange.start.character;
             const endCol = textRange.end.character;
@@ -495,11 +506,17 @@ export class DocstringDecorator {
             boldItalicRegex.lastIndex = 0;
             let match: RegExpExecArray | null;
             while ((match = boldItalicRegex.exec(text)) !== null) {
-                formatSpans.push({
-                    start: match.index + 3, // skip ***
-                    end: match.index + match[0].length - 3, // exclude trailing ***
-                    type: 'bold-italic'
-                });
+                const absoluteStart = startCol + match.index;
+                const absoluteEnd = startCol + match.index + match[0].length;
+
+                // Skip if this markdown span overlaps with any code span
+                if (!overlapsCode(absoluteStart, absoluteEnd)) {
+                    formatSpans.push({
+                        start: match.index + 3, // skip ***
+                        end: match.index + match[0].length - 3, // exclude trailing ***
+                        type: 'bold-italic'
+                    });
+                }
             }
 
             // Find bold (**text** or __text__)
@@ -507,13 +524,20 @@ export class DocstringDecorator {
             while ((match = boldRegex.exec(text)) !== null) {
                 const contentStart = match.index + 2; // skip ** or __
                 const contentEnd = match.index + match[0].length - 2; // exclude trailing ** or __
-                
+                const absoluteStart = startCol + match.index;
+                const absoluteEnd = startCol + match.index + match[0].length;
+
+                // Skip if this markdown span overlaps with any code span
+                if (overlapsCode(absoluteStart, absoluteEnd)) {
+                    continue;
+                }
+
                 // Check if this overlaps with a bold-italic span
-                const overlaps = formatSpans.some(span => 
-                    span.type === 'bold-italic' && 
+                const overlaps = formatSpans.some(span =>
+                    span.type === 'bold-italic' &&
                     contentStart >= span.start - 3 && contentEnd <= span.end + 3
                 );
-                
+
                 if (!overlaps) {
                     formatSpans.push({
                         start: contentStart,
@@ -528,16 +552,23 @@ export class DocstringDecorator {
             while ((match = italicRegex.exec(text)) !== null) {
                 const contentGroup = match[1] || match[2]; // either * or _ group
                 if (!contentGroup) continue;
-                
+
                 const contentStart = match.index + 1; // skip * or _
                 const contentEnd = match.index + match[0].length - 1; // exclude trailing * or _
-                
+                const absoluteStart = startCol + match.index;
+                const absoluteEnd = startCol + match.index + match[0].length;
+
+                // Skip if this markdown span overlaps with any code span
+                if (overlapsCode(absoluteStart, absoluteEnd)) {
+                    continue;
+                }
+
                 // Check if this overlaps with a bold or bold-italic span
-                const overlaps = formatSpans.some(span => 
+                const overlaps = formatSpans.some(span =>
                     (span.type === 'bold' || span.type === 'bold-italic') &&
                     contentStart >= span.start - 2 && contentEnd <= span.end + 2
                 );
-                
+
                 if (!overlaps) {
                     formatSpans.push({
                         start: contentStart,
