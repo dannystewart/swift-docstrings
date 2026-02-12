@@ -167,12 +167,12 @@ export class DocstringDecorator {
             textDecoration: textCss,
         });
 
-        const codeColor = config.get<string>('codeColor', '#8085a3');
+        const codeColor = config.get<string>('codeColor', '') || undefined;
 
         const codeDeco = vscode.window.createTextEditorDecorationType({
             // Restore monospace for inline code -- use the editor's own font
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
-            color: codeColor,
+            ...(codeColor ? { color: codeColor } : {}),
         });
 
         // Lighter proportional font for doc tag keywords (Parameters, Returns, etc.)
@@ -183,7 +183,7 @@ export class DocstringDecorator {
 
         const tagDeco = vscode.window.createTextEditorDecorationType({
             textDecoration: tagCss,
-            color: codeColor,
+            ...(codeColor ? { color: codeColor } : {}),
         });
 
         return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco };

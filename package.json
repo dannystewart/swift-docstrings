@@ -34,8 +34,8 @@
         },
         "swiftDocstrings.codeColor": {
           "type": "string",
-          "default": "#8085a3",
-          "description": "Color for inline code and doc tag keywords (e.g. Parameters, Returns). Accepts any CSS color value."
+          "default": "",
+          "description": "Color for inline code and doc tag keywords (e.g. Parameters, Returns). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         }
       }
     }
