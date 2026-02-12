@@ -9,39 +9,60 @@ const docLineRegex = /^(\s*)(\/\/\/)(.*)?$/;
 // Matches backtick-wrapped inline code segments within doc text.
 const inlineCodeRegex = /`[^`]+`/g;
 
+// Matches "- Parameter name:" form (singular, with an explicit parameter name).
+// Groups: (prefix)(Parameter)(space)(name)(colon+space)(description)
+const singleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
+
+// Matches "- Word:" form (section headers like Returns:, or parameter names under Parameters:).
+// Groups: (prefix)(word)(colon+space)(description)
+const tagLineRegex = /^(\s*-\s+)(\w+)(\s*:\s*)(.*)/;
+
+// All recognized Swift documentation callout keywords (lowercase for comparison).
+const KNOWN_TAGS = new Set([
+    'attention', 'author', 'authors', 'bug', 'complexity', 'copyright',
+    'date', 'experiment', 'important', 'invariant', 'note', 'parameter',
+    'parameters', 'postcondition', 'precondition', 'remark', 'remarks',
+    'requires', 'returns', 'seealso', 'since', 'tag', 'throws', 'todo',
+    'version', 'warning',
+]);
+
 interface DocCommentSegments {
     slashRange: vscode.Range;
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
+    tagRanges: vscode.Range[];
 }
 
 export class DocstringDecorator {
     private slashDecoration: vscode.TextEditorDecorationType;
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
+    private tagDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
-        const { slashDeco, textDeco, codeDeco } = this.buildDecorationTypes(config);
-        this.slashDecoration = slashDeco;
-        this.textDecoration = textDeco;
-        this.codeDecoration = codeDeco;
+        const types = this.buildDecorationTypes(config);
+        this.slashDecoration = types.slashDeco;
+        this.textDecoration = types.textDeco;
+        this.codeDecoration = types.codeDeco;
+        this.tagDecoration = types.tagDeco;
     }
 
     /**
      * Rebuild decoration types from configuration. Call this when settings change.
      */
     rebuildDecorations(): void {
-        // Dispose old decoration types
         this.slashDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
+        this.tagDecoration.dispose();
 
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
-        const { slashDeco, textDeco, codeDeco } = this.buildDecorationTypes(config);
-        this.slashDecoration = slashDeco;
-        this.textDecoration = textDeco;
-        this.codeDecoration = codeDeco;
+        const types = this.buildDecorationTypes(config);
+        this.slashDecoration = types.slashDeco;
+        this.textDecoration = types.textDeco;
+        this.codeDecoration = types.codeDeco;
+        this.tagDecoration = types.tagDeco;
     }
 
     /**
@@ -62,6 +83,7 @@ export class DocstringDecorator {
         const slashRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
+        const tagRanges: vscode.Range[] = [];
 
         for (let i = 0; i < document.lineCount; i++) {
             const line = document.lineAt(i);
@@ -73,11 +95,13 @@ export class DocstringDecorator {
             slashRanges.push(segments.slashRange);
             textRanges.push(...segments.textRanges);
             codeRanges.push(...segments.codeRanges);
+            tagRanges.push(...segments.tagRanges);
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
+        editor.setDecorations(this.tagDecoration, tagRanges);
     }
 
     /**
@@ -87,6 +111,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.slashDecoration, []);
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
+        editor.setDecorations(this.tagDecoration, []);
     }
 
     /**
@@ -96,9 +121,10 @@ export class DocstringDecorator {
         this.slashDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
+        this.tagDecoration.dispose();
     }
 
-    // -- Private --
+    // -- Private: Decoration types --
 
     private buildDecorationTypes(config: vscode.WorkspaceConfiguration) {
         const fontFamily = config.get<string>(
@@ -122,14 +148,29 @@ export class DocstringDecorator {
             textDecoration: textCss,
         });
 
+        const codeColor = new vscode.ThemeColor('editorLineNumber.activeForeground');
+
         const codeDeco = vscode.window.createTextEditorDecorationType({
             // Restore monospace for inline code -- use the editor's own font
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
-            color: new vscode.ThemeColor('editorLineNumber.activeForeground'),
+            color: codeColor,
         });
 
-        return { slashDeco: slashDeco, textDeco: textDeco, codeDeco: codeDeco };
+        // Lighter proportional font for doc tag keywords (Parameters, Returns, etc.)
+        let tagCss = `none; font-family: ${fontFamily}; font-style: normal`;
+        if (fontSize) {
+            tagCss += `; font-size: ${fontSize}`;
+        }
+
+        const tagDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: tagCss,
+            color: codeColor,
+        });
+
+        return { slashDeco, textDeco, codeDeco, tagDeco };
     }
+
+    // -- Private: Parsing --
 
     /**
      * Parse a single line for /// doc comment segments.
@@ -142,82 +183,161 @@ export class DocstringDecorator {
         }
 
         const lineNum = line.lineNumber;
-        const leadingWhitespace = match[1];
-        const slashStart = leadingWhitespace.length;
+        const slashStart = match[1].length;
         const slashEnd = slashStart + 3; // "///" is always 3 chars
-
         const slashRange = new vscode.Range(lineNum, slashStart, lineNum, slashEnd);
 
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
+        const tagRanges: vscode.Range[] = [];
 
         const afterSlash = match[3];
         if (!afterSlash || afterSlash.length === 0) {
-            // Bare /// line with nothing after it
-            return { slashRange, textRanges, codeRanges };
+            return { slashRange, textRanges, codeRanges, tagRanges };
         }
 
-        const textStart = slashEnd; // start of everything after ///
+        const contentStart = slashEnd; // absolute column where text after /// begins
 
-        // Find all inline code spans (backtick pairs) in the text after ///
-        const codeMatches: { start: number; end: number }[] = [];
-        let codeMatch: RegExpExecArray | null;
+        // Try to match doc tag patterns first
+        const tagParsed = this.tryParseDocTag(
+            afterSlash, lineNum, contentStart, textRanges, codeRanges, tagRanges
+        );
 
-        // Reset lastIndex since we reuse the regex
+        if (!tagParsed) {
+            // No tag -- parse the entire text for backticks
+            this.splitByBackticks(afterSlash, lineNum, contentStart, textRanges, codeRanges);
+        }
+
+        return { slashRange, textRanges, codeRanges, tagRanges };
+    }
+
+    /**
+     * Attempt to parse a doc tag pattern from the text after ///.
+     * Populates the provided range arrays and returns true if a tag was found.
+     *
+     * Handles three forms:
+     *   - Parameter name: description   (singular with explicit parameter name)
+     *   - KnownTag: description          (section header like Returns, Throws, etc.)
+     *   - unknownWord: description        (assumed to be a parameter name)
+     */
+    private tryParseDocTag(
+        text: string,
+        lineNum: number,
+        offset: number,
+        textRanges: vscode.Range[],
+        codeRanges: vscode.Range[],
+        tagRanges: vscode.Range[],
+    ): boolean {
+        // Form: "- Parameter name: description"
+        const spMatch = singleParamRegex.exec(text);
+        if (spMatch) {
+            const [, prefix, keyword, space, name, colon, description] = spMatch;
+            let col = offset;
+
+            // "  - " prefix -> text
+            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
+            col += prefix.length;
+
+            // "Parameter" -> tag (bold)
+            tagRanges.push(new vscode.Range(lineNum, col, lineNum, col + keyword.length));
+            col += keyword.length;
+
+            // space between keyword and name -> text
+            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + space.length));
+            col += space.length;
+
+            // parameter name -> code (monospace)
+            codeRanges.push(new vscode.Range(lineNum, col, lineNum, col + name.length));
+            col += name.length;
+
+            // ": " -> text
+            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
+            col += colon.length;
+
+            // description -> backtick-aware text
+            if (description.length > 0) {
+                this.splitByBackticks(description, lineNum, col, textRanges, codeRanges);
+            }
+
+            return true;
+        }
+
+        // Form: "- Word: description"
+        const tagMatch = tagLineRegex.exec(text);
+        if (tagMatch) {
+            const [, prefix, word, colon, description] = tagMatch;
+            const isKnownTag = KNOWN_TAGS.has(word.toLowerCase());
+            let col = offset;
+
+            // "  - " prefix -> text
+            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
+            col += prefix.length;
+
+            if (isKnownTag) {
+                // Known keyword -> tag (bold)
+                tagRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
+            } else {
+                // Unknown word -> assumed parameter name (monospace)
+                codeRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
+            }
+            col += word.length;
+
+            // ": " -> text
+            textRanges.push(new vscode.Range(lineNum, col, lineNum, col + colon.length));
+            col += colon.length;
+
+            // description -> backtick-aware text
+            if (description.length > 0) {
+                this.splitByBackticks(description, lineNum, col, textRanges, codeRanges);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Split a text segment into interleaved text (proportional) and code (monospace)
+     * ranges based on backtick-wrapped inline code spans.
+     */
+    private splitByBackticks(
+        text: string,
+        lineNum: number,
+        offset: number,
+        textRanges: vscode.Range[],
+        codeRanges: vscode.Range[],
+    ): void {
+        const codeSpans: { start: number; end: number }[] = [];
+
         inlineCodeRegex.lastIndex = 0;
-        while ((codeMatch = inlineCodeRegex.exec(afterSlash)) !== null) {
-            codeMatches.push({
-                start: codeMatch.index,
-                end: codeMatch.index + codeMatch[0].length,
-            });
+        let m: RegExpExecArray | null;
+        while ((m = inlineCodeRegex.exec(text)) !== null) {
+            codeSpans.push({ start: m.index, end: m.index + m[0].length });
         }
 
-        if (codeMatches.length === 0) {
-            // No inline code -- the entire remainder is doc text
-            textRanges.push(new vscode.Range(lineNum, textStart, lineNum, line.text.length));
-        } else {
-            // Interleave text and code ranges
-            let cursor = 0;
+        if (codeSpans.length === 0) {
+            textRanges.push(new vscode.Range(lineNum, offset, lineNum, offset + text.length));
+            return;
+        }
 
-            for (const cm of codeMatches) {
-                // Text before this code span
-                if (cm.start > cursor) {
-                    textRanges.push(
-                        new vscode.Range(
-                            lineNum,
-                            textStart + cursor,
-                            lineNum,
-                            textStart + cm.start
-                        )
-                    );
-                }
-
-                // The code span itself
-                codeRanges.push(
-                    new vscode.Range(
-                        lineNum,
-                        textStart + cm.start,
-                        lineNum,
-                        textStart + cm.end
-                    )
-                );
-
-                cursor = cm.end;
-            }
-
-            // Text after the last code span
-            if (cursor < afterSlash.length) {
+        let cursor = 0;
+        for (const span of codeSpans) {
+            if (span.start > cursor) {
                 textRanges.push(
-                    new vscode.Range(
-                        lineNum,
-                        textStart + cursor,
-                        lineNum,
-                        line.text.length
-                    )
+                    new vscode.Range(lineNum, offset + cursor, lineNum, offset + span.start)
                 );
             }
+            codeRanges.push(
+                new vscode.Range(lineNum, offset + span.start, lineNum, offset + span.end)
+            );
+            cursor = span.end;
         }
 
-        return { slashRange, textRanges, codeRanges };
+        if (cursor < text.length) {
+            textRanges.push(
+                new vscode.Range(lineNum, offset + cursor, lineNum, offset + text.length)
+            );
+        }
     }
 }
