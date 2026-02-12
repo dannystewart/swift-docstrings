@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/dannystewart/swift-docstrings"
   },
-  "version": "0.2.0",
+  "version": "0.2.1",
   "engines": {
     "vscode": "^1.105.1"
   },
@@ -46,6 +46,11 @@
           "type": "string",
           "default": "",
           "description": "Color for doc tag keywords (Parameters, Returns, Throws, etc.). Accepts any CSS color value. Leave empty to inherit the doc comment color."
+        },
+        "swiftDocstrings.boldMarkLines": {
+          "type": "boolean",
+          "default": true,
+          "description": "Bold the contents of // MARK: comment lines, similar to Xcode."
         }
       }
     }

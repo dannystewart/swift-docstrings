@@ -6,6 +6,12 @@ import * as vscode from 'vscode';
 // Group 3: everything after /// (may be undefined for bare /// lines)
 const docLineRegex = /^(\s*)(\/\/\/)(.*)?$/;
 
+// Matches a line that is a // MARK: comment (Xcode-like).
+// Group 1: leading whitespace
+// Group 2: the // prefix
+// Group 3: everything after // that begins with MARK:
+const markLineRegex = /^(\s*)(\/\/)(\s*MARK:(?=\s|$|-).*)$/;
+
 // Matches "- Parameter name:" form (singular, with an explicit parameter name).
 // Groups: (prefix)(Parameter)(space)(name)(colon+space)(description)
 const singleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
@@ -71,6 +77,7 @@ export class DocstringDecorator {
     private boldDecoration: vscode.TextEditorDecorationType;
     private italicDecoration: vscode.TextEditorDecorationType;
     private boldItalicDecoration: vscode.TextEditorDecorationType;
+    private markDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
@@ -83,6 +90,7 @@ export class DocstringDecorator {
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
+        this.markDecoration = types.markDeco;
     }
 
     /**
@@ -97,6 +105,7 @@ export class DocstringDecorator {
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
+        this.markDecoration.dispose();
 
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
         const types = this.buildDecorationTypes(config);
@@ -108,6 +117,7 @@ export class DocstringDecorator {
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
+        this.markDecoration = types.markDeco;
     }
 
     /**
@@ -125,6 +135,8 @@ export class DocstringDecorator {
             return;
         }
 
+        const boldMarkLines = config.get<boolean>('boldMarkLines', true);
+
         const slashRanges: vscode.Range[] = [];
         const indentRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
@@ -133,6 +145,7 @@ export class DocstringDecorator {
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
+        const markRanges: vscode.Range[] = [];
 
         // Parse contiguous /// blocks so inline formatting (backticks/markdown emphasis)
         // can continue across successive doc comment lines.
@@ -173,6 +186,23 @@ export class DocstringDecorator {
         editor.setDecorations(this.boldDecoration, boldRanges);
         editor.setDecorations(this.italicDecoration, italicRanges);
         editor.setDecorations(this.boldItalicDecoration, boldItalicRanges);
+
+        if (boldMarkLines) {
+            // Bold // MARK: lines (Xcode-like), but keep the // prefix at normal weight.
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                const match = markLineRegex.exec(line.text);
+                if (!match) continue;
+
+                const commentStartCol = match[1].length + match[2].length;
+                const commentEndCol = line.text.length;
+                if (commentEndCol <= commentStartCol) continue;
+
+                markRanges.push(new vscode.Range(i, commentStartCol, i, commentEndCol));
+            }
+        }
+
+        editor.setDecorations(this.markDecoration, markRanges);
     }
 
     /**
@@ -187,6 +217,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.boldDecoration, []);
         editor.setDecorations(this.italicDecoration, []);
         editor.setDecorations(this.boldItalicDecoration, []);
+        editor.setDecorations(this.markDecoration, []);
     }
 
     /**
@@ -201,6 +232,7 @@ export class DocstringDecorator {
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
+        this.markDecoration.dispose();
     }
 
     // -- Private: Decoration types --
@@ -284,7 +316,12 @@ export class DocstringDecorator {
             textDecoration: boldItalicCss,
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, boldDeco, italicDeco, boldItalicDeco };
+        // Bold MARK lines in monospace, preserving theme comment color.
+        const markDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
+        });
+
+        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
     }
 
     // -- Private: Parsing --
