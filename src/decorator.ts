@@ -29,12 +29,23 @@ const KNOWN_TAGS = new Set([
 // Captures leading whitespace from the text after ///.
 const leadingSpaceRegex = /^(\s+)/;
 
+// Matches bold text: **text** or __text__
+// Uses negative lookbehind to avoid matching escaped asterisks/underscores
+const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
+
+// Matches italic text: *text* or _text_
+// Uses negative lookbehind to avoid matching escaped asterisks/underscores
+const italicRegex = /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g;
+
 interface DocCommentSegments {
     slashRange: vscode.Range;
     indentRanges: vscode.Range[];
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
     tagRanges: vscode.Range[];
+    boldRanges: vscode.Range[];
+    italicRanges: vscode.Range[];
+    boldItalicRanges: vscode.Range[];
 }
 
 export class DocstringDecorator {
@@ -43,6 +54,9 @@ export class DocstringDecorator {
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
     private tagDecoration: vscode.TextEditorDecorationType;
+    private boldDecoration: vscode.TextEditorDecorationType;
+    private italicDecoration: vscode.TextEditorDecorationType;
+    private boldItalicDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
@@ -52,6 +66,9 @@ export class DocstringDecorator {
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
+        this.boldDecoration = types.boldDeco;
+        this.italicDecoration = types.italicDeco;
+        this.boldItalicDecoration = types.boldItalicDeco;
     }
 
     /**
@@ -63,6 +80,9 @@ export class DocstringDecorator {
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
+        this.boldDecoration.dispose();
+        this.italicDecoration.dispose();
+        this.boldItalicDecoration.dispose();
 
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
         const types = this.buildDecorationTypes(config);
@@ -71,6 +91,9 @@ export class DocstringDecorator {
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
         this.tagDecoration = types.tagDeco;
+        this.boldDecoration = types.boldDeco;
+        this.italicDecoration = types.italicDeco;
+        this.boldItalicDecoration = types.boldItalicDeco;
     }
 
     /**
@@ -93,6 +116,9 @@ export class DocstringDecorator {
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
+        const boldRanges: vscode.Range[] = [];
+        const italicRanges: vscode.Range[] = [];
+        const boldItalicRanges: vscode.Range[] = [];
 
         for (let i = 0; i < document.lineCount; i++) {
             const line = document.lineAt(i);
@@ -106,6 +132,9 @@ export class DocstringDecorator {
             textRanges.push(...segments.textRanges);
             codeRanges.push(...segments.codeRanges);
             tagRanges.push(...segments.tagRanges);
+            boldRanges.push(...segments.boldRanges);
+            italicRanges.push(...segments.italicRanges);
+            boldItalicRanges.push(...segments.boldItalicRanges);
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
@@ -113,6 +142,9 @@ export class DocstringDecorator {
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
         editor.setDecorations(this.tagDecoration, tagRanges);
+        editor.setDecorations(this.boldDecoration, boldRanges);
+        editor.setDecorations(this.italicDecoration, italicRanges);
+        editor.setDecorations(this.boldItalicDecoration, boldItalicRanges);
     }
 
     /**
@@ -124,6 +156,9 @@ export class DocstringDecorator {
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
         editor.setDecorations(this.tagDecoration, []);
+        editor.setDecorations(this.boldDecoration, []);
+        editor.setDecorations(this.italicDecoration, []);
+        editor.setDecorations(this.boldItalicDecoration, []);
     }
 
     /**
@@ -135,6 +170,9 @@ export class DocstringDecorator {
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
         this.tagDecoration.dispose();
+        this.boldDecoration.dispose();
+        this.italicDecoration.dispose();
+        this.boldItalicDecoration.dispose();
     }
 
     // -- Private: Decoration types --
@@ -188,7 +226,42 @@ export class DocstringDecorator {
             ...(tagColor ? { color: tagColor } : {}),
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco };
+        // Bold text with proportional font
+        const boldColor = config.get<string>('boldColor', '') || undefined;
+        let boldCss = `none; font-family: ${fontFamily}; font-style: normal; font-weight: bold`;
+        if (fontSize) {
+            boldCss += `; font-size: ${fontSize}`;
+        }
+
+        const boldDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: boldCss,
+            ...(boldColor ? { color: boldColor } : {}),
+        });
+
+        // Italic text with proportional font
+        const italicColor = config.get<string>('italicColor', '') || undefined;
+        let italicCss = `none; font-family: ${fontFamily}; font-style: italic`;
+        if (fontSize) {
+            italicCss += `; font-size: ${fontSize}`;
+        }
+
+        const italicDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: italicCss,
+            ...(italicColor ? { color: italicColor } : {}),
+        });
+
+        // Bold italic text with proportional font
+        let boldItalicCss = `none; font-family: ${fontFamily}; font-style: italic; font-weight: bold`;
+        if (fontSize) {
+            boldItalicCss += `; font-size: ${fontSize}`;
+        }
+
+        const boldItalicDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: boldItalicCss,
+            ...(boldColor || italicColor ? { color: boldColor || italicColor } : {}),
+        });
+
+        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, boldDeco, italicDeco, boldItalicDeco };
     }
 
     // -- Private: Parsing --
@@ -209,20 +282,24 @@ export class DocstringDecorator {
         const slashRange = new vscode.Range(lineNum, slashStart, lineNum, slashEnd);
 
         const indentRanges: vscode.Range[] = [];
-        const textRanges: vscode.Range[] = [];
+        const tempTextRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
         const tagRanges: vscode.Range[] = [];
+        const boldRanges: vscode.Range[] = [];
+        const italicRanges: vscode.Range[] = [];
+        const boldItalicRanges: vscode.Range[] = [];
+        const textRanges: vscode.Range[] = [];
 
         const afterSlash = match[3];
         if (!afterSlash || afterSlash.length === 0) {
-            return { slashRange, indentRanges, textRanges, codeRanges, tagRanges };
+            return { slashRange, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
         }
 
         const contentStart = slashEnd; // absolute column where text after /// begins
 
         // Try to match doc tag patterns first (they handle their own indent ranges)
         const tagParsed = this.tryParseDocTag(
-            afterSlash, lineNum, contentStart, indentRanges, textRanges, codeRanges, tagRanges
+            afterSlash, lineNum, contentStart, indentRanges, tempTextRanges, codeRanges, tagRanges
         );
 
         if (!tagParsed) {
@@ -236,15 +313,18 @@ export class DocstringDecorator {
                 const rest = afterSlash.substring(lsMatch[1].length);
                 if (rest.length > 0) {
                     this.splitByBackticks(
-                        rest, lineNum, contentStart + lsMatch[1].length, textRanges, codeRanges
+                        rest, lineNum, contentStart + lsMatch[1].length, tempTextRanges, codeRanges
                     );
                 }
             } else {
-                this.splitByBackticks(afterSlash, lineNum, contentStart, textRanges, codeRanges);
+                this.splitByBackticks(afterSlash, lineNum, contentStart, tempTextRanges, codeRanges);
             }
         }
 
-        return { slashRange, indentRanges, textRanges, codeRanges, tagRanges };
+        // Now split the text ranges into bold, italic, bold-italic, and plain text
+        this.splitByMarkdownFormatting(tempTextRanges, lineNum, boldRanges, italicRanges, boldItalicRanges, textRanges, line.text);
+
+        return { slashRange, indentRanges, textRanges, codeRanges, tagRanges, boldRanges, italicRanges, boldItalicRanges };
     }
 
     /**
@@ -375,6 +455,134 @@ export class DocstringDecorator {
             textRanges.push(
                 new vscode.Range(lineNum, offset + cursor, lineNum, offset + text.length)
             );
+        }
+    }
+
+    /**
+     * Split text ranges into bold, italic, bold-italic, and plain text ranges.
+     * This should be called after splitByBackticks to avoid formatting inside code spans.
+     */
+    private splitByMarkdownFormatting(
+        textRanges: vscode.Range[],
+        lineNum: number,
+        boldRanges: vscode.Range[],
+        italicRanges: vscode.Range[],
+        boldItalicRanges: vscode.Range[],
+        plainTextRanges: vscode.Range[],
+        lineText: string,
+    ): void {
+        for (const textRange of textRanges) {
+            const startCol = textRange.start.character;
+            const endCol = textRange.end.character;
+            // Extract the text for this range from the line text
+            const text = lineText.substring(startCol, endCol);
+
+            if (!text || text.length === 0) {
+                continue;
+            }
+
+            // Find all formatting spans (bold, italic, and bold-italic)
+            interface FormatSpan {
+                start: number;
+                end: number;
+                type: 'bold' | 'italic' | 'bold-italic';
+            }
+
+            const formatSpans: FormatSpan[] = [];
+
+            // Find bold-italic first (***text***)
+            const boldItalicRegex = /\*\*\*(.+?)\*\*\*/g;
+            boldItalicRegex.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = boldItalicRegex.exec(text)) !== null) {
+                formatSpans.push({
+                    start: match.index + 3, // skip ***
+                    end: match.index + match[0].length - 3, // exclude trailing ***
+                    type: 'bold-italic'
+                });
+            }
+
+            // Find bold (**text** or __text__)
+            boldRegex.lastIndex = 0;
+            while ((match = boldRegex.exec(text)) !== null) {
+                const contentStart = match.index + 2; // skip ** or __
+                const contentEnd = match.index + match[0].length - 2; // exclude trailing ** or __
+                
+                // Check if this overlaps with a bold-italic span
+                const overlaps = formatSpans.some(span => 
+                    span.type === 'bold-italic' && 
+                    contentStart >= span.start - 3 && contentEnd <= span.end + 3
+                );
+                
+                if (!overlaps) {
+                    formatSpans.push({
+                        start: contentStart,
+                        end: contentEnd,
+                        type: 'bold'
+                    });
+                }
+            }
+
+            // Find italic (*text* or _text_)
+            italicRegex.lastIndex = 0;
+            while ((match = italicRegex.exec(text)) !== null) {
+                const contentGroup = match[1] || match[2]; // either * or _ group
+                if (!contentGroup) continue;
+                
+                const contentStart = match.index + 1; // skip * or _
+                const contentEnd = match.index + match[0].length - 1; // exclude trailing * or _
+                
+                // Check if this overlaps with a bold or bold-italic span
+                const overlaps = formatSpans.some(span => 
+                    (span.type === 'bold' || span.type === 'bold-italic') &&
+                    contentStart >= span.start - 2 && contentEnd <= span.end + 2
+                );
+                
+                if (!overlaps) {
+                    formatSpans.push({
+                        start: contentStart,
+                        end: contentEnd,
+                        type: 'italic'
+                    });
+                }
+            }
+
+            // Sort spans by start position
+            formatSpans.sort((a, b) => a.start - b.start);
+
+            // Build ranges for formatted and plain text
+            let cursor = 0;
+            for (const span of formatSpans) {
+                // Plain text before this span
+                if (span.start > cursor) {
+                    plainTextRanges.push(
+                        new vscode.Range(lineNum, startCol + cursor, lineNum, startCol + span.start)
+                    );
+                }
+
+                // The formatted span (content only, excluding markers)
+                const spanRange = new vscode.Range(
+                    lineNum, startCol + span.start,
+                    lineNum, startCol + span.end
+                );
+
+                if (span.type === 'bold') {
+                    boldRanges.push(spanRange);
+                } else if (span.type === 'italic') {
+                    italicRanges.push(spanRange);
+                } else if (span.type === 'bold-italic') {
+                    boldItalicRanges.push(spanRange);
+                }
+
+                cursor = span.end;
+            }
+
+            // Remaining plain text
+            if (cursor < text.length) {
+                plainTextRanges.push(
+                    new vscode.Range(lineNum, startCol + cursor, lineNum, endCol)
+                );
+            }
         }
     }
 }
