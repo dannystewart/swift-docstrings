@@ -2,7 +2,12 @@
   "name": "swift-docstrings",
   "displayName": "Swift Docstrings",
   "description": "Xcode-style proportional font rendering for Swift /// doc comments",
-  "version": "0.0.1",
+  "publisher": "dannystewart",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dannystewart/swift-docstrings"
+  },
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.105.1"
   },
