@@ -2,7 +2,7 @@
 
 Xcode-style proportional font rendering for Swift `///` doc comments in VS Code.
 
-Regular `//` comments stay monospace. Doc comments with `///` render in a proportional sans-serif font, making longer documentation easier to read -- just like Xcode.
+Regular `//` comments stay monospace. Doc comments with `///` render in a proportional sans-serif font, making longer documentation easier to read—just like Xcode.
 
 ## Features
 
@@ -10,7 +10,7 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 - **Inline code** in backticks reverts to monospace
 - **Bold doc tags** for keywords like `Parameters`, `Returns`, `Throws`, etc.
 - **Monospace parameter names** under `Parameters:` blocks
-- **Aligned indentation** -- structural whitespace stays monospace so list items line up properly
+- **Aligned indentation**—structural whitespace stays monospace so list items line up properly
 
 ## Settings
 
