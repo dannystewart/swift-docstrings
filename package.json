@@ -95,6 +95,11 @@
           "type": "boolean",
           "default": false,
           "description": "When wrapping comments, measure max line length starting at the // or /// prefix rather than column 0. This makes wrapping consistent regardless of indentation."
+        },
+        "xcodeComments.avoidWrappingAtPunctuationBreaks": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, the Wrap Comments command will not merge across lines that end with sentence punctuation (. ? !). This helps preserve intentional sentence breaks."
         }
       }
     }
