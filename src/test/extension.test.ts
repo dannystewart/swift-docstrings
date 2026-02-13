@@ -4,6 +4,7 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { DocstringDecorator } from '../decorator';
+import { computeConvertLineCommentsToDocCommentInserts, computeWrapCommentsReplaceEdits } from '../commentCommands';
 
 suite('Extension Test Suite', () => {
 	test('Bolds // MARK: lines (Xcode-like matching), excluding the // prefix', async () => {
@@ -132,5 +133,93 @@ suite('Extension Test Suite', () => {
 		} finally {
 			await config.update('boldMarkLines', undefined, true);
 		}
+	});
+
+	test('Converts // comment prefixes to /// (inserts / after //)', () => {
+		const lines = [
+			'struct Foo {',
+			'    // A line comment',
+			'    /// Already a doc comment',
+			'    //MARK: - Still a line comment (no space)',
+			'\t//\tTabs are fine',
+			'    let s = \"// not a comment prefix\"',
+			'}',
+		];
+
+		const inserts = computeConvertLineCommentsToDocCommentInserts(lines);
+		assert.deepStrictEqual(
+			inserts.map((e) => `${e.line}:${e.character}:${e.text}`),
+			[
+				'1:6:/',
+				'3:6:/',
+				'4:3:/',
+			]
+		);
+	});
+
+	test('Wraps simple // comment paragraphs to max length', () => {
+		const lines = [
+			'// This is a very long comment that should be wrapped into multiple lines for readability.',
+			'// It continues here with more words.',
+			'let x = 1',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 50, '\n');
+		assert.strictEqual(edits.length, 1);
+		assert.strictEqual(edits[0].startLine, 0);
+		assert.strictEqual(edits[0].endLine, 1);
+
+		const wrappedLines = edits[0].text.split('\n');
+		assert.ok(wrappedLines.length > 2, 'Expected wrapping to increase line count.');
+		for (const l of wrappedLines) {
+			assert.ok(l.startsWith('//'), 'Expected wrapped lines to remain // comments.');
+			assert.ok(l.length <= 50 || l === '//', `Expected line length <= 50, got ${l.length}: ${l}`);
+		}
+	});
+
+	test('Does not wrap markdown bullet list blocks', () => {
+		const lines = [
+			'// - A bullet item with a very very very very very long line that should be preserved as-is',
+			'//   and a continuation line that should also be preserved',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		assert.strictEqual(edits.length, 0);
+	});
+
+	test('Wraps /// doc tag bullets by wrapping only the description and aligning continuation', () => {
+		const lines = [
+			'/// - Returns: This is a long return description that should wrap onto continuation lines and stay aligned.',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 60, '\n');
+		assert.strictEqual(edits.length, 1);
+
+		const wrapped = edits[0].text.split('\n');
+		assert.ok(wrapped.length >= 2, 'Expected doc tag wrapping to add continuation lines.');
+		assert.ok(wrapped[0].includes('- Returns:'), 'Expected first line to retain tag prefix.');
+		assert.ok(!wrapped[1].includes('- Returns:'), 'Expected continuation lines to omit tag prefix.');
+		assert.ok(/^\/\/\/\s+/.test(wrapped[1]), `Expected continuation to start with /// and spaces: ${wrapped[1]}`);
+	});
+
+	test('Does not wrap inside fenced code blocks', () => {
+		const lines = [
+			'/// ```swift',
+			'/// let x = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9',
+			'/// ```',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		assert.strictEqual(edits.length, 0);
+	});
+
+	test('Does not wrap directive-like lines', () => {
+		const lines = [
+			'// swiftlint:disable line_length',
+			'// swiftformat:disable wrapArguments',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		assert.strictEqual(edits.length, 0);
 	});
 });

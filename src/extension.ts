@@ -1,11 +1,85 @@
 import * as vscode from 'vscode';
 import { DocstringDecorator } from './decorator';
+import { computeConvertLineCommentsToDocCommentInserts, computeWrapCommentsReplaceEdits } from './commentCommands';
 
 let decorator: DocstringDecorator | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+const CONVERT_COMMAND_ID = 'swiftDocstrings.convertLineCommentsToDocComments';
+const WRAP_COMMAND_ID = 'swiftDocstrings.wrapCommentsToLineLength';
+
 export function activate(context: vscode.ExtensionContext) {
     decorator = new DocstringDecorator();
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(CONVERT_COMMAND_ID, async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                await vscode.window.showInformationMessage('No active editor.');
+                return;
+            }
+            if (editor.document.languageId !== 'swift') {
+                await vscode.window.showInformationMessage('This command only works for Swift files.');
+                return;
+            }
+
+            const lines = Array.from({ length: editor.document.lineCount }, (_, i) => editor.document.lineAt(i).text);
+            const inserts = computeConvertLineCommentsToDocCommentInserts(lines);
+            if (inserts.length === 0) {
+                await vscode.window.showInformationMessage('No // comments to convert.');
+                return;
+            }
+
+            const ok = await editor.edit((editBuilder) => {
+                for (const ins of inserts) {
+                    editBuilder.insert(new vscode.Position(ins.line, ins.character), ins.text);
+                }
+            });
+
+            if (ok) {
+                decorator?.applyDecorations(editor);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(WRAP_COMMAND_ID, async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                await vscode.window.showInformationMessage('No active editor.');
+                return;
+            }
+            if (editor.document.languageId !== 'swift') {
+                await vscode.window.showInformationMessage('This command only works for Swift files.');
+                return;
+            }
+
+            const config = vscode.workspace.getConfiguration('swiftDocstrings');
+            const maxLineLength = config.get<number>('maxCommentLineLength', 100);
+
+            const eol = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+            const lines = Array.from({ length: editor.document.lineCount }, (_, i) => editor.document.lineAt(i).text);
+            const replacements = computeWrapCommentsReplaceEdits(lines, maxLineLength, eol);
+
+            if (replacements.length === 0) {
+                await vscode.window.showInformationMessage('No comments needed wrapping.');
+                return;
+            }
+
+            const sorted = replacements.slice().sort((a, b) => b.startLine - a.startLine);
+            const ok = await editor.edit((editBuilder) => {
+                for (const rep of sorted) {
+                    const endChar = editor.document.lineAt(rep.endLine).text.length;
+                    const range = new vscode.Range(rep.startLine, 0, rep.endLine, endChar);
+                    editBuilder.replace(range, rep.text);
+                }
+            });
+
+            if (ok) {
+                decorator?.applyDecorations(editor);
+            }
+        })
+    );
 
     // Apply to the already-active editor, if it's a Swift file
     if (vscode.window.activeTextEditor) {

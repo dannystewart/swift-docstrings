@@ -21,5 +21,7 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 | `swiftDocstrings.fontSize` | *(inherit)* | Optional font size override (e.g. `0.95em`, `13px`) |
 | `swiftDocstrings.codeColor` | *(inherit)* | Color for inline code and parameter names |
 | `swiftDocstrings.tagColor` | *(inherit)* | Color for doc tag keywords (Parameters, Returns, etc.) |
+| `swiftDocstrings.boldMarkLines` | `true` | Bold the contents of `// MARK:` comment lines, similar to Xcode |
+| `swiftDocstrings.maxCommentLineLength` | `100` | Maximum line length for the Wrap Comments command |
 
 Color settings accept any CSS color value. Leave them empty to inherit your theme's doc comment color.

@@ -19,6 +19,16 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "swiftDocstrings.convertLineCommentsToDocComments",
+        "title": "Swift Docstrings: Convert // to /// in the current file"
+      },
+      {
+        "command": "swiftDocstrings.wrapCommentsToLineLength",
+        "title": "Swift Docstrings: Wrap comments to line length in the current file"
+      }
+    ],
     "configuration": {
       "title": "Swift Docstrings",
       "properties": {
@@ -51,6 +61,11 @@
           "type": "boolean",
           "default": true,
           "description": "Bold the contents of // MARK: comment lines, similar to Xcode."
+        },
+        "swiftDocstrings.maxCommentLineLength": {
+          "type": "integer",
+          "default": 100,
+          "description": "Maximum line length for the Wrap Comments command. Lines will be wrapped to fit within this length (including indentation and // or /// prefix)."
         }
       }
     }
