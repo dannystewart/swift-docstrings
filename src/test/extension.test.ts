@@ -440,7 +440,9 @@ suite('Extension Test Suite', () => {
 		const lines = [
 			'struct Foo {',
 			'    // MARK: - section helpers',
+			'    // MARK: - drag and drop',
 			'    // MARK: - viewDidLoad helpers',
+			'    // MARK: - @Unchecked Sendable',
 			'\t//MARK:-\tsection helpers\t',
 			'    // MARK: - using `urlSession` helpers',
 			'    // MARK:foo (should not match)',
@@ -450,7 +452,7 @@ suite('Extension Test Suite', () => {
 		];
 
 		const edits = computeTitleCaseMarkCommentsReplaceEdits(lines, '\n');
-		assert.strictEqual(edits.length, 4);
+		assert.strictEqual(edits.length, 6);
 
 		const editedLines = lines.slice();
 		for (const e of edits) {
@@ -459,14 +461,16 @@ suite('Extension Test Suite', () => {
 		}
 
 		assert.strictEqual(editedLines[1], '    // MARK: - Section Helpers');
-		assert.strictEqual(editedLines[2], '    // MARK: - viewDidLoad Helpers');
-		assert.strictEqual(editedLines[3], '\t//MARK:-\tSection Helpers\t');
-		assert.strictEqual(editedLines[4], '    // MARK: - Using `urlSession` Helpers');
+		assert.strictEqual(editedLines[2], '    // MARK: - Drag and Drop');
+		assert.strictEqual(editedLines[3], '    // MARK: - viewDidLoad Helpers');
+		assert.strictEqual(editedLines[4], '    // MARK: - @unchecked Sendable');
+		assert.strictEqual(editedLines[5], '\t//MARK:-\tSection Helpers\t');
+		assert.strictEqual(editedLines[6], '    // MARK: - Using `urlSession` Helpers');
 
 		// Non-matching lines should remain untouched.
-		assert.strictEqual(editedLines[5], lines[5]);
-		assert.strictEqual(editedLines[6], lines[6]);
 		assert.strictEqual(editedLines[7], lines[7]);
+		assert.strictEqual(editedLines[8], lines[8]);
+		assert.strictEqual(editedLines[9], lines[9]);
 	});
 
 	test('Wraps simple // comment paragraphs to max length', () => {

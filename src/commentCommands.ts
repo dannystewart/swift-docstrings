@@ -180,18 +180,74 @@ function titleCaseMarkTitlePreservingBackticks(input: string): string {
 }
 
 function titleCaseMarkTextSegment(segment: string): string {
+	const MINOR_WORDS = new Set([
+		'a',
+		'an',
+		'the',
+		'and',
+		'but',
+		'or',
+		'nor',
+		'for',
+		'so',
+		'yet',
+		'as',
+		'at',
+		'by',
+		'for',
+		'from',
+		'in',
+		'into',
+		'of',
+		'on',
+		'onto',
+		'over',
+		'per',
+		'to',
+		'up',
+		'via',
+		'vs',
+		'vs.',
+		'with',
+	]);
+
 	// Preserve whitespace exactly.
 	const parts = segment.split(/(\s+)/);
+
+	const isWordToken = (token: string): boolean => {
+		return /^([^A-Za-z]*)([A-Za-z][A-Za-z']*)([^A-Za-z]*)$/.test(token);
+	};
+
+	const wordTokenIndices: number[] = [];
+	for (let i = 0; i < parts.length; i++) {
+		const p = parts[i];
+		if (p.length === 0) continue;
+		if (/^\s+$/.test(p)) continue;
+		if (!isWordToken(p)) continue;
+		wordTokenIndices.push(i);
+	}
+
+	const firstWordTokenIndex = wordTokenIndices.length > 0 ? wordTokenIndices[0] : -1;
+	const lastWordTokenIndex =
+		wordTokenIndices.length > 0 ? wordTokenIndices[wordTokenIndices.length - 1] : -1;
+
 	return parts
-		.map((p) => {
+		.map((p, idx) => {
 			if (p.length === 0) return p;
 			if (/^\s+$/.test(p)) return p;
-			return titleCaseMarkToken(p);
+			const isFirst = idx === firstWordTokenIndex;
+			const isLast = idx === lastWordTokenIndex;
+			return titleCaseMarkToken(p, MINOR_WORDS, isFirst, isLast);
 		})
 		.join('');
 }
 
-function titleCaseMarkToken(token: string): string {
+function titleCaseMarkToken(
+	token: string,
+	minorWords: ReadonlySet<string>,
+	isFirstWord: boolean,
+	isLastWord: boolean
+): string {
 	// Conservative behavior: leave identifier-like tokens intact.
 	// This includes snake_case, kebab-case, and tokens containing digits.
 	if (token.includes('_') || token.includes('-') || /\d/.test(token)) {
@@ -204,7 +260,21 @@ function titleCaseMarkToken(token: string): string {
 
 	const [, leading, word, trailing] = match;
 	if (word !== word.toLowerCase()) {
+		// Swift has a special-case attribute `@unchecked` (lowercase). If it appears as
+		// `@Unchecked`, normalize it back to lowercase.
+		if (leading.includes('@') && word.toLowerCase() === 'unchecked') {
+			return leading + 'unchecked' + trailing;
+		}
 		return token;
+	}
+
+	// Swift `@unchecked` should always be lowercase.
+	if (leading.includes('@') && word === 'unchecked') {
+		return leading + word + trailing;
+	}
+
+	if (!isFirstWord && !isLastWord && minorWords.has(word)) {
+		return leading + word + trailing;
 	}
 
 	const cased = word[0].toUpperCase() + word.substring(1);
