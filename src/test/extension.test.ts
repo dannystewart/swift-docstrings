@@ -257,6 +257,84 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('Applies code color to inline backticks that span multiple lines in full-line // comment blocks', async () => {
+		const config = vscode.workspace.getConfiguration('xcodeComments');
+		await config.update('codeColor', '#ff00ff', true);
+		await config.update('colorInlineCodeInRegularComments', true, true);
+
+		try {
+			const content = [
+				'struct Foo {',
+				'    // use `Foo Bar',
+				'    // Baz` here',
+				'}',
+				'',
+			].join('\n');
+
+			const doc = await vscode.workspace.openTextDocument({ language: 'swift', content });
+			const editor = await vscode.window.showTextDocument(doc);
+
+			const calls: Array<{ ranges: readonly vscode.Range[] }> = [];
+
+			const originalSetDecorations = editor.setDecorations.bind(editor);
+			const spySetDecorations = (decorationType: vscode.TextEditorDecorationType, ranges: readonly vscode.Range[]) => {
+				calls.push({ ranges: Array.from(ranges) });
+				originalSetDecorations(decorationType, ranges);
+			};
+
+			try {
+				Object.defineProperty(editor, 'setDecorations', { value: spySetDecorations });
+			} catch {
+				(editor as unknown as { setDecorations: typeof spySetDecorations }).setDecorations = spySetDecorations;
+			}
+
+			try {
+				const decorator = new DocstringDecorator();
+				decorator.applyDecorations(editor);
+
+				const rangeKey = (r: vscode.Range) =>
+					`${r.start.line}:${r.start.character}-${r.end.line}:${r.end.character}`;
+
+				const line1Text = doc.lineAt(1).text;
+				const open1 = line1Text.indexOf('`');
+				assert.ok(open1 >= 0, 'Expected opening backtick on first comment line');
+
+				const expectedLine1 = new vscode.Range(1, open1 + 1, 1, line1Text.length);
+
+				const line2Text = doc.lineAt(2).text;
+				const close2 = line2Text.indexOf('`');
+				assert.ok(close2 >= 0, 'Expected closing backtick on second comment line');
+
+				const slashes2 = line2Text.indexOf('//');
+				assert.ok(slashes2 >= 0, 'Expected // on second comment line');
+				const baseCol2 = slashes2 + 2;
+
+				const expectedLine2 = new vscode.Range(2, baseCol2, 2, close2);
+
+				const allRanges = calls.flatMap((c) => Array.from(c.ranges));
+				const actualKeys = allRanges.map(rangeKey);
+
+				assert.ok(
+					actualKeys.includes(rangeKey(expectedLine1)),
+					`Expected multiline inline code range on line 1: ${rangeKey(expectedLine1)}`
+				);
+				assert.ok(
+					actualKeys.includes(rangeKey(expectedLine2)),
+					`Expected multiline inline code range on line 2: ${rangeKey(expectedLine2)}`
+				);
+			} finally {
+				try {
+					Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
+				} catch {
+					(editor as unknown as { setDecorations: typeof originalSetDecorations }).setDecorations = originalSetDecorations;
+				}
+			}
+		} finally {
+			await config.update('codeColor', undefined, true);
+			await config.update('colorInlineCodeInRegularComments', undefined, true);
+		}
+	});
+
 	test('Does not apply code color to inline backticks in regular // comments by default', async () => {
 		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('codeColor', '#ff00ff', true);

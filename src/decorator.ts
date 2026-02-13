@@ -56,6 +56,12 @@ interface InlineSegment {
     text: string;
 }
 
+interface CommentTextSegment {
+    lineNum: number;
+    baseCol: number;
+    text: string;
+}
+
 interface DocBlockSegments {
     slashRanges: vscode.Range[];
     indentRanges: vscode.Range[];
@@ -214,15 +220,71 @@ export class DocstringDecorator {
         }
 
         // Apply code color to inline backtick code within regular // comments.
-        // This is a best-effort, line-local scan. It intentionally does not change fonts.
+        // This is best-effort. It intentionally does not change fonts.
         if (codeColor && colorInlineCodeInRegularComments) {
+            const tryParseFullLineCommentSegment = (lineNum: number): { indent: string; segment: CommentTextSegment } | null => {
+                const line = document.lineAt(lineNum);
+                if (docLineRegex.test(line.text)) return null;
+                if (markLineRegex.test(line.text)) return null;
+
+                const firstNonWs = this.firstNonWhitespaceIndex(line.text);
+                if (firstNonWs === null) return null;
+
+                const rest = line.text.substring(firstNonWs);
+                if (!rest.startsWith('//')) return null;
+                // Full-line only: the comment prefix must be the first non-whitespace.
+                // Exclude doc-style prefixes (///...) from this regular-comment pass.
+                if (rest.startsWith('///')) return null;
+
+                const indent = line.text.substring(0, firstNonWs);
+                const commentTextStartCol = firstNonWs + 2; // after //
+                const commentText =
+                    commentTextStartCol < line.text.length ? line.text.substring(commentTextStartCol) : '';
+                return {
+                    indent,
+                    segment: { lineNum, baseCol: commentTextStartCol, text: commentText },
+                };
+            };
+
+            const isFullLineComment = (lineNum: number): boolean => {
+                return tryParseFullLineCommentSegment(lineNum) !== null;
+            };
+
             for (let i = 0; i < document.lineCount; i++) {
                 const line = document.lineAt(i);
+
+                // Block-aware: consecutive full-line // comments with the same indentation.
+                const firstSeg = tryParseFullLineCommentSegment(i);
+                if (firstSeg) {
+                    const blockIndent = firstSeg.indent;
+                    const segments: CommentTextSegment[] = [firstSeg.segment];
+
+                    let j = i + 1;
+                    for (; j < document.lineCount; j++) {
+                        const next = tryParseFullLineCommentSegment(j);
+                        if (!next) break;
+                        if (next.indent !== blockIndent) break;
+                        segments.push(next.segment);
+                    }
+
+                    // Tokenize backticks across the entire block so spans can wrap across lines.
+                    regularCommentInlineCodeColorRanges.push(
+                        ...this.extractBacktickInnerRangesAcrossSegments(segments)
+                    );
+
+                    i = j - 1;
+                    continue;
+                }
+
+                // Line-local fallback: trailing comments (and anything else with a // later in the line).
                 if (docLineRegex.test(line.text)) continue;
                 if (markLineRegex.test(line.text)) continue;
 
                 const commentStart = this.findSwiftLineCommentStart(line.text);
                 if (commentStart === null) continue;
+
+                // Avoid double-handling full-line comments in the trailing pass.
+                if (isFullLineComment(i)) continue;
 
                 const commentTextStartCol = commentStart + 2; // after //
                 if (commentTextStartCol >= line.text.length) continue;
@@ -570,6 +632,14 @@ export class DocstringDecorator {
         return null;
     }
 
+    private firstNonWhitespaceIndex(text: string): number | null {
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (ch !== ' ' && ch !== '\t') return i;
+        }
+        return null;
+    }
+
     /**
      * Extract ranges for the inner content of paired, unescaped backtick code spans.
      * Backtick markers are not included in the returned ranges.
@@ -608,6 +678,69 @@ export class DocstringDecorator {
         }
 
         return ranges;
+    }
+
+    /**
+     * Extract ranges for the inner content of paired, unescaped backtick code spans across
+     * multiple comment text segments (typically consecutive full-line `//` comment lines).
+     *
+     * The returned ranges exclude the backtick delimiters themselves.
+     *
+     * Semantics intentionally match the line-local extractor:
+     * - Only *paired* spans are emitted. If a backtick is opened but never closed within the
+     *   segments, no ranges are returned for that incomplete span.
+     */
+    private extractBacktickInnerRangesAcrossSegments(segments: readonly CommentTextSegment[]): vscode.Range[] {
+        const committed: vscode.Range[] = [];
+        let inBacktick = false;
+        let pendingSpanRanges: vscode.Range[] = [];
+
+        const isEscapedAt = (text: string, index: number): boolean => {
+            // Treat an odd number of immediately preceding backslashes as escaping.
+            let backslashes = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                if (text[i] !== '\\') break;
+                backslashes++;
+            }
+            return backslashes % 2 === 1;
+        };
+
+        for (const seg of segments) {
+            const { lineNum, baseCol, text } = seg;
+            if (text.length === 0) {
+                continue;
+            }
+
+            let innerStart = 0;
+
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch !== '`' || isEscapedAt(text, i)) continue;
+
+                if (!inBacktick) {
+                    inBacktick = true;
+                    pendingSpanRanges = [];
+                    innerStart = i + 1;
+                } else {
+                    const innerEnd = i;
+                    if (innerEnd > innerStart) {
+                        pendingSpanRanges.push(new vscode.Range(lineNum, baseCol + innerStart, lineNum, baseCol + innerEnd));
+                    }
+                    committed.push(...pendingSpanRanges);
+                    pendingSpanRanges = [];
+                    inBacktick = false;
+                    innerStart = 0;
+                }
+            }
+
+            // Carry an open span across the line by buffering this line's remainder.
+            if (inBacktick && text.length > innerStart) {
+                pendingSpanRanges.push(new vscode.Range(lineNum, baseCol + innerStart, lineNum, baseCol + text.length));
+            }
+        }
+
+        // If the span was never closed, discard buffered ranges to match the line-local behavior.
+        return committed;
     }
 
     /**
