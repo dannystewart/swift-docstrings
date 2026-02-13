@@ -74,6 +74,7 @@ export class DocstringDecorator {
     private indentDecoration: vscode.TextEditorDecorationType;
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
+    private regularCommentInlineCodeColorDecoration: vscode.TextEditorDecorationType;
     private keywordDecoration: vscode.TextEditorDecorationType;
     private markdownMarkerDecoration: vscode.TextEditorDecorationType;
     private boldDecoration: vscode.TextEditorDecorationType;
@@ -88,6 +89,7 @@ export class DocstringDecorator {
         this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
+        this.regularCommentInlineCodeColorDecoration = types.regularCommentInlineCodeColorDeco;
         this.keywordDecoration = types.keywordDeco;
         this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
@@ -104,6 +106,7 @@ export class DocstringDecorator {
         this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
+        this.regularCommentInlineCodeColorDecoration.dispose();
         this.keywordDecoration.dispose();
         this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
@@ -117,6 +120,7 @@ export class DocstringDecorator {
         this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
+        this.regularCommentInlineCodeColorDecoration = types.regularCommentInlineCodeColorDeco;
         this.keywordDecoration = types.keywordDeco;
         this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
@@ -141,6 +145,7 @@ export class DocstringDecorator {
         }
 
         const boldMarkLines = config.get<boolean>('boldMarkLines', true);
+        const codeColor = config.get<string>('codeColor', '') || undefined;
 
         const slashRanges: vscode.Range[] = [];
         const indentRanges: vscode.Range[] = [];
@@ -152,6 +157,7 @@ export class DocstringDecorator {
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
         const markRanges: vscode.Range[] = [];
+        const regularCommentInlineCodeColorRanges: vscode.Range[] = [];
 
         // Parse contiguous /// blocks so inline formatting (backticks/markdown emphasis)
         // can continue across successive doc comment lines.
@@ -185,10 +191,32 @@ export class DocstringDecorator {
             boldItalicRanges.push(...block.boldItalicRanges);
         }
 
+        // Apply code color to inline backtick code within regular // comments.
+        // This is a best-effort, line-local scan. It intentionally does not change fonts.
+        if (codeColor) {
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                if (docLineRegex.test(line.text)) continue;
+                if (markLineRegex.test(line.text)) continue;
+
+                const commentStart = this.findSwiftLineCommentStart(line.text);
+                if (commentStart === null) continue;
+
+                const commentTextStartCol = commentStart + 2; // after //
+                if (commentTextStartCol >= line.text.length) continue;
+
+                const commentText = line.text.substring(commentTextStartCol);
+                regularCommentInlineCodeColorRanges.push(
+                    ...this.extractBacktickInnerRanges(i, commentTextStartCol, commentText)
+                );
+            }
+        }
+
         editor.setDecorations(this.slashDecoration, slashRanges);
         editor.setDecorations(this.indentDecoration, indentRanges);
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
+        editor.setDecorations(this.regularCommentInlineCodeColorDecoration, regularCommentInlineCodeColorRanges);
         editor.setDecorations(this.keywordDecoration, keywordRanges);
         editor.setDecorations(this.markdownMarkerDecoration, markdownMarkerRanges);
         editor.setDecorations(this.boldDecoration, boldRanges);
@@ -221,6 +249,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.indentDecoration, []);
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
+        editor.setDecorations(this.regularCommentInlineCodeColorDecoration, []);
         editor.setDecorations(this.keywordDecoration, []);
         editor.setDecorations(this.markdownMarkerDecoration, []);
         editor.setDecorations(this.boldDecoration, []);
@@ -237,6 +266,7 @@ export class DocstringDecorator {
         this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
+        this.regularCommentInlineCodeColorDecoration.dispose();
         this.keywordDecoration.dispose();
         this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
@@ -280,6 +310,12 @@ export class DocstringDecorator {
         const codeDeco = vscode.window.createTextEditorDecorationType({
             // Restore monospace for inline code -- use the editor's own font
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
+            ...(codeColor ? { color: codeColor } : {}),
+        });
+
+        // Regular // comments should remain completely theme-driven for fonts/styles. We only
+        // apply the configured code color to inline backtick code spans.
+        const regularCommentInlineCodeColorDeco = vscode.window.createTextEditorDecorationType({
             ...(codeColor ? { color: codeColor } : {}),
         });
 
@@ -337,10 +373,130 @@ export class DocstringDecorator {
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
+        return { slashDeco, indentDeco, textDeco, codeDeco, regularCommentInlineCodeColorDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
     }
 
     // -- Private: Parsing --
+
+    /**
+     * Best-effort scan for a Swift line comment ("//") that is not inside a normal or raw
+     * string literal on the same line.
+     *
+     * This does not attempt full Swift lexing. It is intended to handle common cases like:
+     *   let s = "http://example.com" // trailing comment
+     */
+    private findSwiftLineCommentStart(text: string): number | null {
+        let inString = false;
+        let rawHashes = 0;
+        let isTripleQuote = false;
+
+        const tryOpenStringAt = (quotePos: number, hashes: number) => {
+            inString = true;
+            rawHashes = hashes;
+            isTripleQuote = text.substring(quotePos, quotePos + 3) === '"""';
+        };
+
+        for (let i = 0; i < text.length - 1; i++) {
+            if (!inString) {
+                // Raw strings: one or more # followed by a quote.
+                if (text[i] === '#') {
+                    let h = 0;
+                    while (i + h < text.length && text[i + h] === '#') h++;
+                    const quotePos = i + h;
+                    if (quotePos < text.length && text[quotePos] === '"') {
+                        tryOpenStringAt(quotePos, h);
+                        i = quotePos + (isTripleQuote ? 2 : 0);
+                        continue;
+                    }
+                }
+
+                // Normal strings: a quote.
+                if (text[i] === '"') {
+                    tryOpenStringAt(i, 0);
+                    i += isTripleQuote ? 2 : 0;
+                    continue;
+                }
+
+                if (text[i] === '/' && text[i + 1] === '/') {
+                    return i;
+                }
+            } else {
+                // In a normal string, skip escaped characters.
+                if (rawHashes === 0 && text[i] === '\\') {
+                    i += 1;
+                    continue;
+                }
+
+                if (isTripleQuote) {
+                    if (text.substring(i, i + 3) === '"""') {
+                        let j = i + 3;
+                        let k = 0;
+                        while (k < rawHashes && j + k < text.length && text[j + k] === '#') k++;
+                        if (k === rawHashes) {
+                            inString = false;
+                            rawHashes = 0;
+                            isTripleQuote = false;
+                            i = j + k - 1;
+                        }
+                    }
+                } else {
+                    if (text[i] === '"') {
+                        let j = i + 1;
+                        let k = 0;
+                        while (k < rawHashes && j + k < text.length && text[j + k] === '#') k++;
+                        if (k === rawHashes) {
+                            inString = false;
+                            rawHashes = 0;
+                            isTripleQuote = false;
+                            i = j + k - 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract ranges for the inner content of paired, unescaped backtick code spans.
+     * Backtick markers are not included in the returned ranges.
+     */
+    private extractBacktickInnerRanges(lineNum: number, baseCol: number, commentText: string): vscode.Range[] {
+        const ranges: vscode.Range[] = [];
+
+        const isEscapedAt = (text: string, index: number): boolean => {
+            // Treat an odd number of immediately preceding backslashes as escaping.
+            let backslashes = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                if (text[i] !== '\\') break;
+                backslashes++;
+            }
+            return backslashes % 2 === 1;
+        };
+
+        let inBacktick = false;
+        let innerStart = -1;
+
+        for (let i = 0; i < commentText.length; i++) {
+            const ch = commentText[i];
+            if (ch !== '`' || isEscapedAt(commentText, i)) continue;
+
+            if (!inBacktick) {
+                inBacktick = true;
+                innerStart = i + 1;
+            } else {
+                const innerEnd = i;
+                if (innerEnd > innerStart) {
+                    ranges.push(new vscode.Range(lineNum, baseCol + innerStart, lineNum, baseCol + innerEnd));
+                }
+                inBacktick = false;
+                innerStart = -1;
+            }
+        }
+
+        return ranges;
+    }
 
     /**
      * Parse a contiguous block of /// doc comment lines.
