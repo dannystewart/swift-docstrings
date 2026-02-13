@@ -473,6 +473,16 @@ suite('Extension Test Suite', () => {
 		assert.ok(/^\/\/\/\s+/.test(wrapped[1]), `Expected continuation to start with /// and spaces: ${wrapped[1]}`);
 	});
 
+	test('Normalizes extra spaces after /// for doc keyword header lines', () => {
+		const lines = ['///    - Returns: Something'];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 200, '\n', false);
+		assert.strictEqual(edits.length, 1);
+
+		const wrapped = edits[0].text.split('\n');
+		assert.deepStrictEqual(wrapped, ['/// - Returns: Something']);
+	});
+
 	test('Does not wrap inside fenced code blocks', () => {
 		const lines = [
 			'/// ```swift',

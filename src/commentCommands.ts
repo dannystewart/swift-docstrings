@@ -175,8 +175,14 @@ function wrapCommentBlock(
 				flushParagraph(paragraph);
 				listMode = false;
 
-				const { keywordPrefixText, description } = docTag;
-				const continuationPrefix = ' '.repeat(keywordPrefixText.length);
+				const { keywordPrefixText: rawKeywordPrefixText, description } = docTag;
+
+				// Ensure we never emit more than one leading whitespace character between the
+				// doc comment prefix (`///`) and the first non-whitespace character of text.
+				// This only applies to the doc-tag "header" prefix (e.g. "- Returns: ").
+				const normalizedKeywordPrefixText = normalizeDocTagKeywordPrefixText(rawKeywordPrefixText);
+				const normalizedContinuationPrefix = ' '.repeat(normalizedKeywordPrefixText.length);
+				const rawContinuationPrefix = ' '.repeat(rawKeywordPrefixText.length);
 
 				let descParts: string[] = [];
 				if (description.trim().length > 0) {
@@ -194,9 +200,15 @@ function wrapCommentBlock(
 					if (isFenceLine(nextAfterTrimStart)) break;
 					if (isDirectiveLine(nextAfterTrimStart) || isTableOrAsciiArtLine(nextAfterTrimStart)) break;
 					if (isMarkdownListItem(nextAfterTrimStart)) break;
-					if (!nextAfter.startsWith(continuationPrefix)) break;
+					let matchedPrefix: string | null = null;
+					if (nextAfter.startsWith(rawContinuationPrefix)) {
+						matchedPrefix = rawContinuationPrefix;
+					} else if (nextAfter.startsWith(normalizedContinuationPrefix)) {
+						matchedPrefix = normalizedContinuationPrefix;
+					}
+					if (!matchedPrefix) break;
 
-					const remainder = nextAfter.substring(continuationPrefix.length);
+					const remainder = nextAfter.substring(matchedPrefix.length);
 					if (remainder.trim().length === 0) break;
 
 					descParts.push(remainder.trim());
@@ -208,17 +220,17 @@ function wrapCommentBlock(
 					maxLineLength -
 						((wrapCountFromCommentStart ? 0 : indent.length) +
 							prefix.length +
-							keywordPrefixText.length)
+							normalizedKeywordPrefixText.length)
 				);
 				const wrappedDesc = fullDesc.length > 0 ? wrapWords(fullDesc, availableWidth) : [''];
 
 				if (wrappedDesc.length === 0) {
-					output.push(indent + prefix + keywordPrefixText.trimEnd());
+					output.push(indent + prefix + normalizedKeywordPrefixText.trimEnd());
 				} else {
 					const firstLine = wrappedDesc[0];
-					output.push(indent + prefix + keywordPrefixText + firstLine);
+					output.push(indent + prefix + normalizedKeywordPrefixText + firstLine);
 					for (let k = 1; k < wrappedDesc.length; k++) {
-						output.push(indent + prefix + continuationPrefix + wrappedDesc[k]);
+						output.push(indent + prefix + normalizedContinuationPrefix + wrappedDesc[k]);
 					}
 				}
 
@@ -256,6 +268,12 @@ function wrapCommentBlock(
 	flushParagraph(paragraph);
 
 	return output;
+}
+
+function normalizeDocTagKeywordPrefixText(keywordPrefixText: string): string {
+	if (keywordPrefixText.length === 0) return keywordPrefixText;
+	if (!/^\s/.test(keywordPrefixText)) return keywordPrefixText;
+	return ' ' + keywordPrefixText.trimStart();
 }
 
 function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; description: string } | null {
