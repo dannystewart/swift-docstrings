@@ -249,9 +249,38 @@ function titleCaseMarkToken(
 	isLastWord: boolean
 ): string {
 	// Conservative behavior: leave identifier-like tokens intact.
-	// This includes snake_case, kebab-case, and tokens containing digits.
-	if (token.includes('_') || token.includes('-') || /\d/.test(token)) {
+	// This includes snake_case and tokens containing digits.
+	if (token.includes('_') || /\d/.test(token)) {
 		return token;
+	}
+
+	// Hyphenated lowercase words should still become Title Case, e.g. "per-page" -> "Per-page".
+	// We keep this conservative by only capitalizing the first segment.
+	if (token.includes('-')) {
+		const hyphenMatch = /^([^A-Za-z]*)([A-Za-z][A-Za-z'-]*)([^A-Za-z]*)$/.exec(token);
+		if (!hyphenMatch) return token;
+
+		const [, leading, core, trailing] = hyphenMatch;
+
+		// If the core has any uppercase already, treat it as intentional and leave it unchanged
+		// (except for `@unchecked` normalization handled below).
+		if (core !== core.toLowerCase()) {
+			if (leading.includes('@') && core.toLowerCase() === 'unchecked') {
+				return leading + 'unchecked' + trailing;
+			}
+			return token;
+		}
+
+		const parts = core.split(/(-)/);
+		for (let i = 0; i < parts.length; i += 2) {
+			const word = parts[i];
+			if (word.length === 0) continue;
+			if (i === 0) {
+				parts[i] = word[0].toUpperCase() + word.substring(1);
+			}
+		}
+
+		return leading + parts.join('') + trailing;
 	}
 
 	// Split out leading/trailing non-letter punctuation so we can title-case "word," -> "Word,".
