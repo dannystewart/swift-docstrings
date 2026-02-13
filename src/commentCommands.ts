@@ -26,6 +26,37 @@ const MIN_WRAP_LINE_LENGTH = 40;
 const docTagSingleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
 const docTagLineRegex = /^(\s*-\s+)(\w+)(\s*:\s*)(.*)/;
 
+// Recognized Swift doc callout keywords (lowercase for comparison). This mirrors
+// `KNOWN_TAGS` in `src/decorator.ts` so wrapping behavior matches decoration behavior.
+const KNOWN_DOC_TAGS = new Set([
+	'attention',
+	'author',
+	'authors',
+	'bug',
+	'complexity',
+	'copyright',
+	'date',
+	'experiment',
+	'important',
+	'invariant',
+	'note',
+	'parameter',
+	'parameters',
+	'postcondition',
+	'precondition',
+	'remark',
+	'remarks',
+	'requires',
+	'returns',
+	'seealso',
+	'since',
+	'tag',
+	'throws',
+	'todo',
+	'version',
+	'warning',
+]);
+
 const listBulletRegex = /^(\s*)([-*+])\s+/;
 const listNumberRegex = /^(\s*)(\d+)([.)])\s+/;
 
@@ -392,13 +423,16 @@ function wrapCommentBlock(
 				flushParagraph(paragraph);
 				listMode = false;
 
-				const { keywordPrefixText: rawKeywordPrefixText, description } = docTag;
+				const { keywordPrefixText: rawKeywordPrefixText, description, tagWordLower } = docTag;
 
 				// Ensure we never emit more than one leading whitespace character between the
 				// doc comment prefix (`///`) and the first non-whitespace character of text.
 				// This only applies to the doc-tag "header" prefix (e.g. "- Returns: ").
-				const normalizedKeywordPrefixText = normalizeDocTagKeywordPrefixText(rawKeywordPrefixText);
-				const normalizedContinuationPrefix = ' '.repeat(normalizedKeywordPrefixText.length);
+				const shouldNormalizeLeadingWhitespace = KNOWN_DOC_TAGS.has(tagWordLower);
+				const renderedKeywordPrefixText = shouldNormalizeLeadingWhitespace
+					? normalizeDocTagKeywordPrefixText(rawKeywordPrefixText)
+					: rawKeywordPrefixText;
+				const renderedContinuationPrefix = ' '.repeat(renderedKeywordPrefixText.length);
 				const rawContinuationPrefix = ' '.repeat(rawKeywordPrefixText.length);
 
 				let descParts: string[] = [];
@@ -420,8 +454,8 @@ function wrapCommentBlock(
 					let matchedPrefix: string | null = null;
 					if (nextAfter.startsWith(rawContinuationPrefix)) {
 						matchedPrefix = rawContinuationPrefix;
-					} else if (nextAfter.startsWith(normalizedContinuationPrefix)) {
-						matchedPrefix = normalizedContinuationPrefix;
+					} else if (nextAfter.startsWith(renderedContinuationPrefix)) {
+						matchedPrefix = renderedContinuationPrefix;
 					}
 					if (!matchedPrefix) break;
 
@@ -437,17 +471,17 @@ function wrapCommentBlock(
 					maxLineLength -
 						((wrapCountFromCommentStart ? 0 : indent.length) +
 							prefix.length +
-							normalizedKeywordPrefixText.length)
+							renderedKeywordPrefixText.length)
 				);
 				const wrappedDesc = fullDesc.length > 0 ? wrapWords(fullDesc, availableWidth) : [''];
 
 				if (wrappedDesc.length === 0) {
-					output.push(indent + prefix + normalizedKeywordPrefixText.trimEnd());
+					output.push(indent + prefix + renderedKeywordPrefixText.trimEnd());
 				} else {
 					const firstLine = wrappedDesc[0];
-					output.push(indent + prefix + normalizedKeywordPrefixText + firstLine);
+					output.push(indent + prefix + renderedKeywordPrefixText + firstLine);
 					for (let k = 1; k < wrappedDesc.length; k++) {
-						output.push(indent + prefix + normalizedContinuationPrefix + wrappedDesc[k]);
+						output.push(indent + prefix + renderedContinuationPrefix + wrappedDesc[k]);
 					}
 				}
 
@@ -493,13 +527,14 @@ function normalizeDocTagKeywordPrefixText(keywordPrefixText: string): string {
 	return ' ' + keywordPrefixText.trimStart();
 }
 
-function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; description: string } | null {
+function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; description: string; tagWordLower: string } | null {
 	const spMatch = docTagSingleParamRegex.exec(afterPrefix);
 	if (spMatch) {
 		const [, prefix, keyword, space, name, colon, description] = spMatch;
 		return {
 			keywordPrefixText: `${prefix}${keyword}${space}${name}${colon}`,
 			description,
+			tagWordLower: keyword.toLowerCase(),
 		};
 	}
 
@@ -509,6 +544,7 @@ function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; d
 		return {
 			keywordPrefixText: `${prefix}${word}${colon}`,
 			description,
+			tagWordLower: word.toLowerCase(),
 		};
 	}
 

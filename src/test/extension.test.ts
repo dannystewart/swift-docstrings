@@ -660,6 +660,30 @@ suite('Extension Test Suite', () => {
 		assert.deepStrictEqual(wrapped, ['/// - Returns: Something']);
 	});
 
+	test('Preserves indentation for indented parameter bullets under Parameters: when wrapping', () => {
+		const lines = [
+			'/// Parameters:',
+			'///   - foo: This is a long parameter description that should wrap onto continuation lines and keep the bullet indentation.',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 70, '\n', false);
+		assert.strictEqual(edits.length, 1);
+
+		const wrapped = edits[0].text.split('\n');
+		assert.strictEqual(wrapped[0], '/// Parameters:');
+		assert.ok(wrapped.length >= 3, 'Expected parameter bullet wrapping to add continuation lines.');
+
+		assert.ok(wrapped[1].startsWith('///   - foo:'), `Expected bullet indentation to be preserved: ${wrapped[1]}`);
+		assert.ok(!wrapped[1].startsWith('/// - foo:'), `Expected bullet indentation not to be collapsed: ${wrapped[1]}`);
+
+		// Continuation should align to the description start (i.e. after "   - foo: ").
+		assert.ok(
+			wrapped[2].startsWith('///' + ' '.repeat(10)),
+			`Expected continuation to start with /// + 10 spaces: ${wrapped[2]}`
+		);
+		assert.ok(!wrapped[2].includes('- foo:'), `Expected continuation to omit the bullet prefix: ${wrapped[2]}`);
+	});
+
 	test('Does not wrap inside fenced code blocks', () => {
 		const lines = [
 			'/// ```swift',
