@@ -10,6 +10,8 @@ export interface ReplaceEdit {
 	text: string;
 }
 
+import { findLeadingCapsLabel } from './capsLabel';
+
 type CommentPrefix = '//' | '///';
 
 interface CommentLineParts {
@@ -208,6 +210,13 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 				i = j - 1;
 				continue;
 			}
+		}
+
+		// Treat leading all-caps labels like "NOTE:" / "IMPORTANT:" as hard paragraph boundaries.
+		// This ensures wrapping doesn't merge preceding text into callout-style lines.
+		if (findLeadingCapsLabel(after)) {
+			flushParagraph(paragraph);
+			listMode = false;
 		}
 
 		const isListItem = isMarkdownListItem(afterTrimStart);

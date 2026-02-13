@@ -345,6 +345,14 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('Does not merge across all-caps callout label lines (e.g. NOTE:)', () => {
+		const lines = ['// This is a comment', '// NOTE: This is a note about the comment'];
+
+		// If the block were merged, it would reflow into a single line and produce an edit.
+		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n');
+		assert.strictEqual(edits.length, 0);
+	});
+
 	test('Does not wrap markdown bullet list blocks', () => {
 		const lines = [
 			'// - A bullet item with a very very very very very long line that should be preserved as-is',

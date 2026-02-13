@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { findLeadingCapsLabel } from './capsLabel';
 
 // Matches a line that is a /// doc comment.
 // Group 1: leading whitespace
@@ -246,26 +247,12 @@ export class DocstringDecorator {
             const afterPrefixStart = commentStart + prefixLen;
             if (afterPrefixStart >= line.text.length) continue;
 
-            let labelStart = afterPrefixStart;
-            while (labelStart < line.text.length && /\s/.test(line.text[labelStart])) {
-                labelStart++;
-            }
-            if (labelStart >= line.text.length) continue;
+            const match = findLeadingCapsLabel(line.text.substring(afterPrefixStart));
+            if (!match) continue;
 
-            const colonIndex = line.text.indexOf(':', labelStart);
-            if (colonIndex === -1) continue;
-
-            let labelEnd = colonIndex;
-            while (labelEnd > labelStart && /\s/.test(line.text[labelEnd - 1])) {
-                labelEnd--;
-            }
-            if (labelEnd <= labelStart) continue;
-
-            const candidate = line.text.substring(labelStart, labelEnd);
-            if (!/[A-Z]/.test(candidate)) continue;
-            if (!/^[A-Z0-9_]+(?:[ \t]+[A-Z0-9_]+)*$/.test(candidate)) continue;
-
-            capsLabelRanges.push(new vscode.Range(i, labelStart, i, labelEnd));
+            const absStart = afterPrefixStart + match.labelStart;
+            const absEnd = afterPrefixStart + match.labelEnd;
+            capsLabelRanges.push(new vscode.Range(i, absStart, i, absEnd));
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
