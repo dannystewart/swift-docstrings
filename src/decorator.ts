@@ -523,7 +523,7 @@ export class DocstringDecorator {
             borderWidth: '1px 0 0 0',
             borderStyle: 'solid',
             borderColor:
-                'color-mix(in srgb, var(--vscode-editorLineNumber-foreground) 40%, transparent)',
+                'color-mix(in srgb, var(--vscode-editorLineNumber-foreground) 50%, transparent)',
         });
 
         // Bold-only decoration that intentionally does not change font family. This allows:
