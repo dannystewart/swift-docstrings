@@ -759,6 +759,11 @@ export class DocstringDecorator {
 
         const inlineSegments: InlineSegment[] = [];
 
+        // Track a "- Parameters:" section so we can treat indented "- name:" bullets as
+        // parameter-name entries. Outside that section, "- Word:" bullets should be treated
+        // as normal list text (no parameter-name highlighting).
+        let parametersHeaderIndent: number | null = null;
+
         for (const line of lines) {
             const match = docLineRegex.exec(line.text);
             if (!match) {
@@ -772,10 +777,40 @@ export class DocstringDecorator {
 
             const afterSlash = match[3] ?? '';
             if (afterSlash.length === 0) {
+                parametersHeaderIndent = null;
+                continue;
+            }
+
+            // Whitespace-only doc comment line: treat as a section boundary.
+            if (afterSlash.trim().length === 0) {
+                parametersHeaderIndent = null;
                 continue;
             }
 
             const contentStart = slashEnd; // absolute column where text after /// begins
+
+            // Determine whether an unknown "- word:" bullet should be treated as a parameter name.
+            // We only do that when we're inside a "- Parameters:" section and the bullet is indented
+            // deeper than the section header.
+            let unknownWordIsParamName = false;
+            const keywordProbe = keywordLineRegex.exec(afterSlash);
+            if (keywordProbe) {
+                const [, prefix, word] = keywordProbe;
+                const wordLower = word.toLowerCase();
+                const isKnownTag = KNOWN_TAGS.has(wordLower);
+                const prefixIndentLen = (/^\s*/.exec(prefix)?.[0].length ?? 0);
+
+                if (isKnownTag && wordLower === 'parameters') {
+                    parametersHeaderIndent = prefixIndentLen;
+                } else if (isKnownTag && parametersHeaderIndent !== null && prefixIndentLen <= parametersHeaderIndent) {
+                    // A new top-level callout ends the Parameters section.
+                    parametersHeaderIndent = null;
+                }
+
+                if (!isKnownTag && parametersHeaderIndent !== null && prefixIndentLen > parametersHeaderIndent) {
+                    unknownWordIsParamName = true;
+                }
+            }
 
             // Try to match doc keyword patterns first (they handle their own indent ranges)
             const keywordParsed = this.tryParseDocTag(
@@ -786,6 +821,7 @@ export class DocstringDecorator {
                 codeRanges,
                 keywordRanges,
                 inlineSegments,
+                unknownWordIsParamName,
             );
 
             if (!keywordParsed) {
@@ -843,7 +879,7 @@ export class DocstringDecorator {
      * Handles three forms:
      *   - Parameter name: description   (singular with explicit parameter name)
      *   - KnownTag: description         (section header like Returns, Throws, etc.)
-     *   - unknownWord: description      (assumed to be a parameter name)
+     *   - unknownWord: description      (treated as a parameter name only within Parameters: blocks)
      */
     private tryParseDocTag(
         text: string,
@@ -853,6 +889,7 @@ export class DocstringDecorator {
         codeRanges: vscode.Range[],
         keywordRanges: vscode.Range[],
         inlineSegments: InlineSegment[],
+        unknownWordIsParamName: boolean,
     ): boolean {
         // Form: "- Parameter name: description"
         const spMatch = singleParamRegex.exec(text);
@@ -902,9 +939,12 @@ export class DocstringDecorator {
             if (isKnownTag) {
                 // Known keyword -> keyword (bold)
                 keywordRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
-            } else {
-                // Unknown word -> assumed parameter name (monospace)
+            } else if (unknownWordIsParamName) {
+                // Unknown word inside a Parameters section -> assumed parameter name (monospace)
                 codeRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
+            } else {
+                // Unknown word outside Parameters -> treat as normal list text (no special highlighting).
+                inlineSegments.push({ lineNum, startCol: col, text: word });
             }
             col += word.length;
 
