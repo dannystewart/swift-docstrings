@@ -48,6 +48,11 @@
           "default": "",
           "description": "Optional font size override for doc comment text (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
         },
+        "swiftDocstrings.monospaceFontSize": {
+          "type": "string",
+          "default": "",
+          "description": "Optional font size override for monospace segments inside /// doc comments (inline code, parameter names, structural indent, markdown markers). Accepts any CSS size value (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
+        },
         "swiftDocstrings.codeColor": {
           "type": "string",
           "default": "",

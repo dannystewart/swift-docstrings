@@ -33,6 +33,7 @@ Settings in `package.json` under `swiftDocstrings.*`:
 - `enabled`: Toggle the extension on/off
 - `fontFamily`: Proportional font for doc text
 - `fontSize`: Optional size override
+- `monospaceFontSize`: Optional size override for monospace segments inside doc comments
 - `codeColor`: Color for inline code and parameter names
 - `keywordColor`: Color for doc keywords
 

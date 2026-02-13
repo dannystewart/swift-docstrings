@@ -283,6 +283,7 @@ export class DocstringDecorator {
             '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
         );
         const fontSize = config.get<string>('fontSize', '');
+        const monospaceFontSize = config.get<string>('monospaceFontSize', '');
 
         // Build the CSS injection string for proportional doc text
         let textCss = `none; font-family: ${fontFamily}; font-style: normal`;
@@ -297,8 +298,12 @@ export class DocstringDecorator {
 
         // Monospace with no color override -- keeps structural whitespace, dashes,
         // and colons aligned while inheriting the theme's doc comment color.
+        let indentCss = 'none; font-family: var(--vscode-editor-font-family); font-style: normal';
+        if (monospaceFontSize) {
+            indentCss += `; font-size: ${monospaceFontSize}`;
+        }
         const indentDeco = vscode.window.createTextEditorDecorationType({
-            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
+            textDecoration: indentCss,
         });
 
         const textDeco = vscode.window.createTextEditorDecorationType({
@@ -307,9 +312,13 @@ export class DocstringDecorator {
 
         const codeColor = config.get<string>('codeColor', '') || undefined;
 
+        let codeCss = 'none; font-family: var(--vscode-editor-font-family); font-style: normal';
+        if (monospaceFontSize) {
+            codeCss += `; font-size: ${monospaceFontSize}`;
+        }
         const codeDeco = vscode.window.createTextEditorDecorationType({
             // Restore monospace for inline code -- use the editor's own font
-            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal',
+            textDecoration: codeCss,
             ...(codeColor ? { color: codeColor } : {}),
         });
 
@@ -334,8 +343,12 @@ export class DocstringDecorator {
 
         // Markdown delimiter characters (e.g. *, _, backticks) should remain monospace and
         // inherit the theme's comment color, but appear slightly dimmer like Xcode.
+        let markdownMarkerCss = 'none; font-family: var(--vscode-editor-font-family); font-style: normal; opacity: 0.6';
+        if (monospaceFontSize) {
+            markdownMarkerCss += `; font-size: ${monospaceFontSize}`;
+        }
         const markdownMarkerDeco = vscode.window.createTextEditorDecorationType({
-            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; opacity: 0.6',
+            textDecoration: markdownMarkerCss,
         });
 
         // Bold text with proportional font
