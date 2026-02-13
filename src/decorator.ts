@@ -81,6 +81,7 @@ export class DocstringDecorator {
     private italicDecoration: vscode.TextEditorDecorationType;
     private boldItalicDecoration: vscode.TextEditorDecorationType;
     private markDecoration: vscode.TextEditorDecorationType;
+    private capsLabelDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
@@ -96,6 +97,7 @@ export class DocstringDecorator {
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
         this.markDecoration = types.markDeco;
+        this.capsLabelDecoration = types.capsLabelDeco;
     }
 
     /**
@@ -113,6 +115,7 @@ export class DocstringDecorator {
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
         this.markDecoration.dispose();
+        this.capsLabelDecoration.dispose();
 
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
         const types = this.buildDecorationTypes(config);
@@ -127,6 +130,7 @@ export class DocstringDecorator {
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
         this.markDecoration = types.markDeco;
+        this.capsLabelDecoration = types.capsLabelDeco;
     }
 
     /**
@@ -158,6 +162,7 @@ export class DocstringDecorator {
         const boldItalicRanges: vscode.Range[] = [];
         const markRanges: vscode.Range[] = [];
         const regularCommentInlineCodeColorRanges: vscode.Range[] = [];
+        const capsLabelRanges: vscode.Range[] = [];
 
         // Parse contiguous /// blocks so inline formatting (backticks/markdown emphasis)
         // can continue across successive doc comment lines.
@@ -212,6 +217,45 @@ export class DocstringDecorator {
             }
         }
 
+        // Bold all-caps labels that appear before a colon in any line comment (// or ///).
+        // Example: "/// NOTE:" or "let x = 1 // IMPORTANT:".
+        //
+        // This scan intentionally does not alter fonts; it only applies bold weight so
+        // regular comments stay monospace and doc comments stay proportional.
+        for (let i = 0; i < document.lineCount; i++) {
+            const line = document.lineAt(i);
+            if (markLineRegex.test(line.text)) continue;
+
+            const commentStart = this.findSwiftLineCommentStart(line.text);
+            if (commentStart === null) continue;
+
+            const isDocPrefix = line.text[commentStart + 2] === '/';
+            const prefixLen = isDocPrefix ? 3 : 2;
+            const afterPrefixStart = commentStart + prefixLen;
+            if (afterPrefixStart >= line.text.length) continue;
+
+            let labelStart = afterPrefixStart;
+            while (labelStart < line.text.length && /\s/.test(line.text[labelStart])) {
+                labelStart++;
+            }
+            if (labelStart >= line.text.length) continue;
+
+            const colonIndex = line.text.indexOf(':', labelStart);
+            if (colonIndex === -1) continue;
+
+            let labelEnd = colonIndex;
+            while (labelEnd > labelStart && /\s/.test(line.text[labelEnd - 1])) {
+                labelEnd--;
+            }
+            if (labelEnd <= labelStart) continue;
+
+            const candidate = line.text.substring(labelStart, labelEnd);
+            if (!/[A-Z]/.test(candidate)) continue;
+            if (!/^[A-Z0-9_]+(?:[ \t]+[A-Z0-9_]+)*$/.test(candidate)) continue;
+
+            capsLabelRanges.push(new vscode.Range(i, labelStart, i, labelEnd));
+        }
+
         editor.setDecorations(this.slashDecoration, slashRanges);
         editor.setDecorations(this.indentDecoration, indentRanges);
         editor.setDecorations(this.textDecoration, textRanges);
@@ -222,6 +266,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.boldDecoration, boldRanges);
         editor.setDecorations(this.italicDecoration, italicRanges);
         editor.setDecorations(this.boldItalicDecoration, boldItalicRanges);
+        editor.setDecorations(this.capsLabelDecoration, capsLabelRanges);
 
         if (boldMarkLines) {
             // Bold // MARK: lines (Xcode-like), but keep the // prefix at normal weight.
@@ -256,6 +301,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.italicDecoration, []);
         editor.setDecorations(this.boldItalicDecoration, []);
         editor.setDecorations(this.markDecoration, []);
+        editor.setDecorations(this.capsLabelDecoration, []);
     }
 
     /**
@@ -273,6 +319,7 @@ export class DocstringDecorator {
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
         this.markDecoration.dispose();
+        this.capsLabelDecoration.dispose();
     }
 
     // -- Private: Decoration types --
@@ -386,7 +433,14 @@ export class DocstringDecorator {
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, regularCommentInlineCodeColorDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
+        // Bold-only decoration that intentionally does not change font family. This allows:
+        // - regular // comments to remain monospace
+        // - /// doc comment text to remain proportional (from the doc decorations)
+        const capsLabelDeco = vscode.window.createTextEditorDecorationType({
+            fontWeight: 'bold',
+        });
+
+        return { slashDeco, indentDeco, textDeco, codeDeco, regularCommentInlineCodeColorDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco, capsLabelDeco };
     }
 
     // -- Private: Parsing --
