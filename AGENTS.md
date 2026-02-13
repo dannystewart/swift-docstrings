@@ -1,4 +1,4 @@
-# Swift Docstrings
+# Xcode Comments
 
 ## Project Overview
 
@@ -28,7 +28,7 @@ This is a VS Code extension that renders Swift `///` doc comments in a proportio
 
 ### Configuration
 
-Settings in `package.json` under `swiftDocstrings.*`:
+Settings in `package.json` under `xcodeComments.*`:
 
 - `enabled`: Toggle the extension on/off
 - `fontFamily`: Proportional font for doc text

@@ -92,7 +92,7 @@ export class DocstringDecorator {
     private capsLabelDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
-        const config = vscode.workspace.getConfiguration('swiftDocstrings');
+        const config = vscode.workspace.getConfiguration('xcodeComments');
         const types = this.buildDecorationTypes(config);
         this.slashDecoration = types.slashDeco;
         this.indentDecoration = types.indentDeco;
@@ -127,7 +127,7 @@ export class DocstringDecorator {
         this.markSeparatorDecoration.dispose();
         this.capsLabelDecoration.dispose();
 
-        const config = vscode.workspace.getConfiguration('swiftDocstrings');
+        const config = vscode.workspace.getConfiguration('xcodeComments');
         const types = this.buildDecorationTypes(config);
         this.slashDecoration = types.slashDeco;
         this.indentDecoration = types.indentDeco;
@@ -148,7 +148,7 @@ export class DocstringDecorator {
      * Parse the document and apply decorations to all /// doc comment lines.
      */
     applyDecorations(editor: vscode.TextEditor): void {
-        const config = vscode.workspace.getConfiguration('swiftDocstrings');
+        const config = vscode.workspace.getConfiguration('xcodeComments');
         if (!config.get<boolean>('enabled', true)) {
             this.clearDecorations(editor);
             return;

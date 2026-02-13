@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog], and this project adheres to [Semantic
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/dannystewart/swift-docstrings/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/dannystewart/swift-docstrings/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/dannystewart/swift-docstrings/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/dannystewart/swift-docstrings/releases/tag/v0.1.0
+[unreleased]: https://github.com/dannystewart/xcode-comments/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dannystewart/xcode-comments/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/dannystewart/xcode-comments/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/dannystewart/xcode-comments/releases/tag/v0.1.0

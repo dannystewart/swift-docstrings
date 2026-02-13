@@ -1,13 +1,13 @@
 {
-  "name": "swift-docstrings",
-  "displayName": "Swift Docstrings",
-  "description": "Xcode-style proportional font rendering for Swift /// doc comments",
+  "name": "xcode-comments",
+  "displayName": "Xcode Comments",
+  "description": "Xcode-style rendering for comments and doc comments",
   "publisher": "dannystewart",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dannystewart/swift-docstrings"
+    "url": "https://github.com/dannystewart/xcode-comments"
   },
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.105.1"
@@ -22,63 +22,63 @@
   "contributes": {
     "commands": [
       {
-        "command": "swiftDocstrings.convertLineCommentsToDocComments",
-        "title": "Swift Docstrings: Convert // to /// in the current file"
+        "command": "xcodeComments.convertLineCommentsToDocComments",
+        "title": "Xcode Comments: Convert // to /// in the current file"
       },
       {
-        "command": "swiftDocstrings.wrapCommentsToLineLength",
-        "title": "Swift Docstrings: Wrap comments to line length in the current file"
+        "command": "xcodeComments.wrapCommentsToLineLength",
+        "title": "Xcode Comments: Wrap comments to line length in the current file"
       }
     ],
     "configuration": {
-      "title": "Swift Docstrings",
+      "title": "Xcode Comments",
       "properties": {
-        "swiftDocstrings.enabled": {
+        "xcodeComments.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable Xcode-style proportional font rendering for /// doc comments."
+          "description": "Enable Xcode-style rendering for comments and doc comments."
         },
-        "swiftDocstrings.fontFamily": {
+        "xcodeComments.fontFamily": {
           "type": "string",
           "default": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
           "description": "Font family for doc comment text. Use a proportional/sans-serif font for the Xcode look."
         },
-        "swiftDocstrings.fontSize": {
+        "xcodeComments.fontSize": {
           "type": "string",
           "default": "",
           "description": "Optional font size override for doc comment text (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
         },
-        "swiftDocstrings.monospaceFontSize": {
+        "xcodeComments.monospaceFontSize": {
           "type": "string",
           "default": "",
           "description": "Optional font size override for monospace segments inside /// doc comments (inline code, parameter names, structural indent, markdown markers). Accepts any CSS size value (e.g. \"0.95em\", \"13px\"). Leave empty to inherit the editor font size."
         },
-        "swiftDocstrings.codeColor": {
+        "xcodeComments.codeColor": {
           "type": "string",
           "default": "",
           "description": "Color for inline code (backtick-wrapped text and parameter names). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         },
-        "swiftDocstrings.keywordColor": {
+        "xcodeComments.keywordColor": {
           "type": "string",
           "default": "",
           "description": "Color for doc keywords (Parameters, Returns, Throws, etc.). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         },
-        "swiftDocstrings.boldMarkLines": {
+        "xcodeComments.boldMarkLines": {
           "type": "boolean",
           "default": true,
           "description": "Bold the contents of // MARK: comment lines, similar to Xcode."
         },
-        "swiftDocstrings.markSeparatorLines": {
+        "xcodeComments.markSeparatorLines": {
           "type": "boolean",
           "default": true,
           "description": "Draw a subtle separator line above // MARK: - lines, similar to Xcode."
         },
-        "swiftDocstrings.maxCommentLineLength": {
+        "xcodeComments.maxCommentLineLength": {
           "type": "integer",
           "default": 100,
           "description": "Maximum line length for the Wrap Comments command. Lines will be wrapped to fit within this length (including indentation and // or /// prefix)."
         },
-        "swiftDocstrings.wrapCountFromCommentStart": {
+        "xcodeComments.wrapCountFromCommentStart": {
           "type": "boolean",
           "default": false,
           "description": "When wrapping comments, measure max line length starting at the // or /// prefix rather than column 0. This makes wrapping consistent regardless of indentation."

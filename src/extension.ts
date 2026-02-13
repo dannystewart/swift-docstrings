@@ -5,8 +5,8 @@ import { computeConvertLineCommentsToDocCommentInserts, computeWrapCommentsRepla
 let decorator: DocstringDecorator | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-const CONVERT_COMMAND_ID = 'swiftDocstrings.convertLineCommentsToDocComments';
-const WRAP_COMMAND_ID = 'swiftDocstrings.wrapCommentsToLineLength';
+const CONVERT_COMMAND_ID = 'xcodeComments.convertLineCommentsToDocComments';
+const WRAP_COMMAND_ID = 'xcodeComments.wrapCommentsToLineLength';
 
 export function activate(context: vscode.ExtensionContext) {
     decorator = new DocstringDecorator();
@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const config = vscode.workspace.getConfiguration('swiftDocstrings');
+            const config = vscode.workspace.getConfiguration('xcodeComments');
             const maxLineLength = config.get<number>('maxCommentLineLength', 100);
             const wrapCountFromCommentStart = config.get<boolean>('wrapCountFromCommentStart', false);
 
@@ -115,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Rebuild decoration types when configuration changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
-            if (!event.affectsConfiguration('swiftDocstrings') || !decorator) {
+            if (!event.affectsConfiguration('xcodeComments') || !decorator) {
                 return;
             }
             decorator.rebuildDecorations();

@@ -106,7 +106,7 @@ suite('Extension Test Suite', () => {
 	});
 
 	test('Does not bold // MARK: lines when disabled in settings', async () => {
-		const config = vscode.workspace.getConfiguration('swiftDocstrings');
+		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('boldMarkLines', false, true);
 		await config.update('markSeparatorLines', true, true);
 
@@ -165,7 +165,7 @@ suite('Extension Test Suite', () => {
 	});
 
 	test('Applies code color to inline backticks in regular // comments (including trailing), excluding // MARK:', async () => {
-		const config = vscode.workspace.getConfiguration('swiftDocstrings');
+		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('codeColor', '#ff00ff', true);
 
 		try {
@@ -303,7 +303,7 @@ suite('Extension Test Suite', () => {
 	});
 
 	test('Does not apply MARK separator line to plain // MARK: (no dash)', async () => {
-		const config = vscode.workspace.getConfiguration('swiftDocstrings');
+		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('markSeparatorLines', true, true);
 
 		try {
@@ -384,7 +384,7 @@ suite('Extension Test Suite', () => {
 			'let x = 1',
 		];
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 50, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 50, '\n', false);
 		assert.strictEqual(edits.length, 1);
 		assert.strictEqual(edits[0].startLine, 0);
 		assert.strictEqual(edits[0].endLine, 1);
@@ -401,7 +401,7 @@ suite('Extension Test Suite', () => {
 		const max = 60;
 		const eol = '\n';
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n', false);
+		const baseLines = [
 			'// This is a very long comment that should wrap consistently even when it is indented in the file.',
 			'// It should produce the same line breaks as an unindented comment.',
 			'let x = 1',
@@ -444,7 +444,7 @@ suite('Extension Test Suite', () => {
 		const lines = ['// This is a comment', '// NOTE: This is a note about the comment'];
 
 		// If the block were merged, it would reflow into a single line and produce an edit.
-		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n', false);
 		assert.strictEqual(edits.length, 0);
 	});
 
@@ -454,7 +454,7 @@ suite('Extension Test Suite', () => {
 			'//   and a continuation line that should also be preserved',
 		];
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n', false);
 		assert.strictEqual(edits.length, 0);
 	});
 
@@ -463,7 +463,7 @@ suite('Extension Test Suite', () => {
 			'/// - Returns: This is a long return description that should wrap onto continuation lines and stay aligned.',
 		];
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 60, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 60, '\n', false);
 		assert.strictEqual(edits.length, 1);
 
 		const wrapped = edits[0].text.split('\n');
@@ -480,7 +480,7 @@ suite('Extension Test Suite', () => {
 			'/// ```',
 		];
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n', false);
 		assert.strictEqual(edits.length, 0);
 	});
 
@@ -490,7 +490,7 @@ suite('Extension Test Suite', () => {
 			'// swiftformat:disable wrapArguments',
 		];
 
-		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n');
+		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n', false);
 		assert.strictEqual(edits.length, 0);
 	});
 });

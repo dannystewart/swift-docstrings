@@ -1,4 +1,4 @@
-# Swift Docstrings
+# Xcode Comments
 
 Xcode-style proportional font rendering for Swift `///` doc comments in VS Code.
 
@@ -16,12 +16,12 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 
 | Setting | Default | Description |
 | ------- | ------- | ----------- |
-| `swiftDocstrings.enabled` | `true` | Enable or disable the extension |
-| `swiftDocstrings.fontFamily` | System sans-serif | Proportional font for doc text |
-| `swiftDocstrings.fontSize` | *(inherit)* | Optional font size override (e.g. `0.95em`, `13px`) |
-| `swiftDocstrings.codeColor` | *(inherit)* | Color for inline code and parameter names |
-| `swiftDocstrings.keywordColor` | *(inherit)* | Color for doc keywords (Parameters, Returns, etc.) |
-| `swiftDocstrings.boldMarkLines` | `true` | Bold the contents of `// MARK:` comment lines, similar to Xcode |
-| `swiftDocstrings.maxCommentLineLength` | `100` | Maximum line length for the Wrap Comments command |
+| `xcodeComments.enabled` | `true` | Enable or disable the extension |
+| `xcodeComments.fontFamily` | System sans-serif | Proportional font for doc text |
+| `xcodeComments.fontSize` | *(inherit)* | Optional font size override (e.g. `0.95em`, `13px`) |
+| `xcodeComments.codeColor` | *(inherit)* | Color for inline code and parameter names |
+| `xcodeComments.keywordColor` | *(inherit)* | Color for doc keywords (Parameters, Returns, etc.) |
+| `xcodeComments.boldMarkLines` | `true` | Bold the contents of `// MARK:` comment lines, similar to Xcode |
+| `xcodeComments.maxCommentLineLength` | `100` | Maximum line length for the Wrap Comments command |
 
 Color settings accept any CSS color value. Leave them empty to inherit your theme's doc comment color.
