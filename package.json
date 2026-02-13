@@ -77,6 +77,11 @@
           "type": "integer",
           "default": 100,
           "description": "Maximum line length for the Wrap Comments command. Lines will be wrapped to fit within this length (including indentation and // or /// prefix)."
+        },
+        "swiftDocstrings.wrapCountFromCommentStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "When wrapping comments, measure max line length starting at the // or /// prefix rather than column 0. This makes wrapping consistent regardless of indentation."
         }
       }
     }

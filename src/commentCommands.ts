@@ -51,7 +51,8 @@ export function computeConvertLineCommentsToDocCommentInserts(lines: readonly st
 export function computeWrapCommentsReplaceEdits(
 	lines: readonly string[],
 	maxLineLength: number,
-	eol: '\n' | '\r\n'
+	eol: '\n' | '\r\n',
+	wrapCountFromCommentStart = false
 ): ReplaceEdit[] {
 	const edits: ReplaceEdit[] = [];
 	const clampMax = Math.max(MIN_WRAP_LINE_LENGTH, Math.floor(maxLineLength || 0) || 0);
@@ -74,7 +75,7 @@ export function computeWrapCommentsReplaceEdits(
 
 		const blockEndInclusive = j - 1;
 		const blockLines = lines.slice(blockStart, j);
-		const wrapped = wrapCommentBlock(blockLines, clampMax);
+		const wrapped = wrapCommentBlock(blockLines, clampMax, wrapCountFromCommentStart);
 
 		const same =
 			wrapped.length === blockLines.length && wrapped.every((l, idx) => l === blockLines[idx]);
@@ -92,7 +93,11 @@ export function computeWrapCommentsReplaceEdits(
 	return edits;
 }
 
-function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number): string[] {
+function wrapCommentBlock(
+	blockLines: readonly string[],
+	maxLineLength: number,
+	wrapCountFromCommentStart: boolean
+): string[] {
 	const parts = blockLines.map(parseCommentLine);
 	if (parts.some((p) => !p)) {
 		return Array.from(blockLines);
@@ -110,7 +115,11 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 	const flushParagraph = (paragraph: string[]) => {
 		if (paragraph.length === 0) return;
 
-		const availableWidth = Math.max(1, maxLineLength - (indent.length + prefix.length + 1));
+		const availableWidth = Math.max(
+			1,
+			maxLineLength -
+				((wrapCountFromCommentStart ? 0 : indent.length) + prefix.length + 1)
+		);
 		const joined = paragraph.map((p) => p.trim()).filter(Boolean).join(' ');
 		const wrapped = wrapWords(joined, availableWidth);
 		for (const line of wrapped) {
@@ -194,7 +203,13 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 				}
 
 				const fullDesc = descParts.join(' ').trim();
-				const availableWidth = Math.max(1, maxLineLength - (indent.length + prefix.length + keywordPrefixText.length));
+				const availableWidth = Math.max(
+					1,
+					maxLineLength -
+						((wrapCountFromCommentStart ? 0 : indent.length) +
+							prefix.length +
+							keywordPrefixText.length)
+				);
 				const wrappedDesc = fullDesc.length > 0 ? wrapWords(fullDesc, availableWidth) : [''];
 
 				if (wrappedDesc.length === 0) {

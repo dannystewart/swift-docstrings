@@ -397,6 +397,49 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('Wraps consistently regardless of indentation when wrapCountFromCommentStart is enabled', () => {
+		const max = 60;
+		const eol = '\n';
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n', false);
+			'// This is a very long comment that should wrap consistently even when it is indented in the file.',
+			'// It should produce the same line breaks as an unindented comment.',
+			'let x = 1',
+		];
+
+		const indent = '        ';
+		const indentedLines = [
+			indent + '// This is a very long comment that should wrap consistently even when it is indented in the file.',
+			indent + '// It should produce the same line breaks as an unindented comment.',
+			'let x = 1',
+		];
+
+		const baseEdits = computeWrapCommentsReplaceEdits(baseLines, max, eol, true);
+		const indentedEdits = computeWrapCommentsReplaceEdits(indentedLines, max, eol, true);
+
+		assert.strictEqual(baseEdits.length, 1);
+		assert.strictEqual(indentedEdits.length, 1);
+
+		const baseWrapped = baseEdits[0].text.split(eol);
+		const indentedWrapped = indentedEdits[0].text.split(eol);
+
+		const normalized = (ls: string[]) => ls.map((l) => l.trimStart());
+		assert.deepStrictEqual(
+			normalized(indentedWrapped),
+			normalized(baseWrapped),
+			'Expected wrapped line breaks to be identical aside from preserved indentation.'
+		);
+
+		for (const l of indentedWrapped) {
+			assert.ok(l.startsWith(indent + '//'), `Expected wrapped indented line to keep indentation: ${l}`);
+			const fromCommentStartLen = l.trimStart().length;
+			assert.ok(
+				fromCommentStartLen <= max || l.trimStart() === '//',
+				`Expected length from comment start <= ${max}, got ${fromCommentStartLen}: ${l}`
+			);
+		}
+	});
+
 	test('Does not merge across all-caps callout label lines (e.g. NOTE:)', () => {
 		const lines = ['// This is a comment', '// NOTE: This is a note about the comment'];
 
