@@ -167,6 +167,7 @@ suite('Extension Test Suite', () => {
 	test('Applies code color to inline backticks in regular // comments (including trailing), excluding // MARK:', async () => {
 		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('codeColor', '#ff00ff', true);
+		await config.update('colorInlineCodeInRegularComments', true, true);
 
 		try {
 			const content = [
@@ -237,6 +238,60 @@ suite('Extension Test Suite', () => {
 				}
 
 				assert.ok(!actualKeys.includes(rangeKey(notExpected)), 'Did not expect inline code decoration inside // MARK: line.');
+			} finally {
+				// Restore the original method to avoid leaking into other tests.
+				try {
+					Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
+				} catch {
+					(editor as unknown as { setDecorations: typeof originalSetDecorations }).setDecorations = originalSetDecorations;
+				}
+			}
+		} finally {
+			await config.update('codeColor', undefined, true);
+			await config.update('colorInlineCodeInRegularComments', undefined, true);
+		}
+	});
+
+	test('Does not apply code color to inline backticks in regular // comments by default', async () => {
+		const config = vscode.workspace.getConfiguration('xcodeComments');
+		await config.update('codeColor', '#ff00ff', true);
+
+		try {
+			const content = ['struct Foo {', '// use `Foo` here', '}'].join('\n');
+
+			const doc = await vscode.workspace.openTextDocument({ language: 'swift', content });
+			const editor = await vscode.window.showTextDocument(doc);
+
+			const calls: Array<{ ranges: readonly vscode.Range[] }> = [];
+
+			const originalSetDecorations = editor.setDecorations.bind(editor);
+			const spySetDecorations = (decorationType: vscode.TextEditorDecorationType, ranges: readonly vscode.Range[]) => {
+				calls.push({ ranges: Array.from(ranges) });
+				originalSetDecorations(decorationType, ranges);
+			};
+
+			// Spy on setDecorations to observe applied ranges.
+			try {
+				Object.defineProperty(editor, 'setDecorations', { value: spySetDecorations });
+			} catch {
+				(editor as unknown as { setDecorations: typeof spySetDecorations }).setDecorations = spySetDecorations;
+			}
+
+			try {
+				const decorator = new DocstringDecorator();
+				decorator.applyDecorations(editor);
+
+				const expected = new vscode.Range(1, 8, 1, 11); // Foo
+				const rangeKey = (r: vscode.Range) =>
+					`${r.start.line}:${r.start.character}-${r.end.line}:${r.end.character}`;
+
+				const allRanges = calls.flatMap((c) => Array.from(c.ranges));
+				const actualKeys = allRanges.map(rangeKey);
+
+				assert.ok(
+					!actualKeys.includes(rangeKey(expected)),
+					`Did not expect inline code range to be decorated by default: ${rangeKey(expected)}`
+				);
 			} finally {
 				// Restore the original method to avoid leaking into other tests.
 				try {

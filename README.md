@@ -20,6 +20,7 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 | `xcodeComments.fontFamily` | System sans-serif | Proportional font for doc text |
 | `xcodeComments.fontSize` | *(inherit)* | Optional font size override (e.g. `0.95em`, `13px`) |
 | `xcodeComments.codeColor` | *(inherit)* | Color for inline code and parameter names |
+| `xcodeComments.colorInlineCodeInRegularComments` | `false` | Apply `codeColor` to backtick-wrapped inline code in standard `//` comments (excluding `// MARK:`) |
 | `xcodeComments.keywordColor` | *(inherit)* | Color for doc keywords (Parameters, Returns, etc.) |
 | `xcodeComments.boldMarkLines` | `true` | Bold the contents of `// MARK:` comment lines, similar to Xcode |
 | `xcodeComments.maxCommentLineLength` | `100` | Maximum line length for the Wrap Comments command |

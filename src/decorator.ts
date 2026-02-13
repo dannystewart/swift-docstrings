@@ -162,6 +162,10 @@ export class DocstringDecorator {
         const boldMarkLines = config.get<boolean>('boldMarkLines', true);
         const markSeparatorLines = config.get<boolean>('markSeparatorLines', true);
         const codeColor = config.get<string>('codeColor', '') || undefined;
+        const colorInlineCodeInRegularComments = config.get<boolean>(
+            'colorInlineCodeInRegularComments',
+            false
+        );
 
         const slashRanges: vscode.Range[] = [];
         const indentRanges: vscode.Range[] = [];
@@ -211,7 +215,7 @@ export class DocstringDecorator {
 
         // Apply code color to inline backtick code within regular // comments.
         // This is a best-effort, line-local scan. It intentionally does not change fonts.
-        if (codeColor) {
+        if (codeColor && colorInlineCodeInRegularComments) {
             for (let i = 0; i < document.lineCount; i++) {
                 const line = document.lineAt(i);
                 if (docLineRegex.test(line.text)) continue;

@@ -58,6 +58,11 @@
           "default": "",
           "description": "Color for inline code (backtick-wrapped text and parameter names). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         },
+        "xcodeComments.colorInlineCodeInRegularComments": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, apply xcodeComments.codeColor to backtick-wrapped inline code within standard // comments (excluding // MARK: lines). This does not change fonts in standard comments."
+        },
         "xcodeComments.keywordColor": {
           "type": "string",
           "default": "",
