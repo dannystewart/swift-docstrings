@@ -28,6 +28,10 @@
       {
         "command": "xcodeComments.wrapCommentsToLineLength",
         "title": "Xcode Comments: Wrap comments to line length in the current file"
+      },
+      {
+        "command": "xcodeComments.titleCaseMarkComments",
+        "title": "Xcode Comments: Title Case // MARK: lines in the current file"
       }
     ],
     "configuration": {

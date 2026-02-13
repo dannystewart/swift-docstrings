@@ -4,7 +4,11 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { DocstringDecorator } from '../decorator';
-import { computeConvertLineCommentsToDocCommentInserts, computeWrapCommentsReplaceEdits } from '../commentCommands';
+import {
+	computeConvertLineCommentsToDocCommentInserts,
+	computeTitleCaseMarkCommentsReplaceEdits,
+	computeWrapCommentsReplaceEdits,
+} from '../commentCommands';
 
 suite('Extension Test Suite', () => {
 	test('Bolds // MARK: lines (Xcode-like matching), excluding the // prefix', async () => {
@@ -430,6 +434,39 @@ suite('Extension Test Suite', () => {
 				'4:3:/',
 			]
 		);
+	});
+
+	test('Title-cases // MARK: titles in the current file (conservative)', () => {
+		const lines = [
+			'struct Foo {',
+			'    // MARK: - section helpers',
+			'    // MARK: - viewDidLoad helpers',
+			'\t//MARK:-\tsection helpers\t',
+			'    // MARK: - using `urlSession` helpers',
+			'    // MARK:foo (should not match)',
+			'    // Mark: - wrong case',
+			'    /// MARK: - section helpers',
+			'}',
+		];
+
+		const edits = computeTitleCaseMarkCommentsReplaceEdits(lines, '\n');
+		assert.strictEqual(edits.length, 4);
+
+		const editedLines = lines.slice();
+		for (const e of edits) {
+			assert.strictEqual(e.startLine, e.endLine, 'Expected per-line edits.');
+			editedLines[e.startLine] = e.text;
+		}
+
+		assert.strictEqual(editedLines[1], '    // MARK: - Section Helpers');
+		assert.strictEqual(editedLines[2], '    // MARK: - viewDidLoad Helpers');
+		assert.strictEqual(editedLines[3], '\t//MARK:-\tSection Helpers\t');
+		assert.strictEqual(editedLines[4], '    // MARK: - Using `urlSession` Helpers');
+
+		// Non-matching lines should remain untouched.
+		assert.strictEqual(editedLines[5], lines[5]);
+		assert.strictEqual(editedLines[6], lines[6]);
+		assert.strictEqual(editedLines[7], lines[7]);
 	});
 
 	test('Wraps simple // comment paragraphs to max length', () => {

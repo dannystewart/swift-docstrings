@@ -93,6 +93,124 @@ export function computeWrapCommentsReplaceEdits(
 	return edits;
 }
 
+// Matches a line that is a // MARK: comment (Xcode-like), same semantics as `src/decorator.ts`.
+// Group 1: leading whitespace
+// Group 2: the // prefix
+// Group 3: everything after // that begins with MARK:
+const markLineRegex = /^(\s*)(\/\/)(\s*MARK:(?=\s|$|-).*)$/;
+
+export function computeTitleCaseMarkCommentsReplaceEdits(
+	lines: readonly string[],
+	eol: '\n' | '\r\n'
+): ReplaceEdit[] {
+	const edits: ReplaceEdit[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const match = markLineRegex.exec(line);
+		if (!match) continue;
+
+		const indent = match[1];
+		const slashes = match[2];
+		const afterSlashes = match[3];
+
+		const markIndex = afterSlashes.indexOf('MARK:');
+		if (markIndex < 0) continue;
+
+		const afterColonIndex = markIndex + 'MARK:'.length;
+		const afterColon = afterSlashes.substring(afterColonIndex);
+
+		// If this is a separator MARK line ("MARK: - ..."), treat the dash portion as structural
+		// and only Title Case the text after it.
+		const dashMatch = /^\s*-\s*/.exec(afterColon);
+		const structuralPrefixAfterColon = dashMatch ? dashMatch[0] : '';
+		const titleWithLeadingSpace = dashMatch ? afterColon.substring(dashMatch[0].length) : afterColon;
+
+		const leadingSpaceMatch = /^\s*/.exec(titleWithLeadingSpace);
+		const leadingSpace = leadingSpaceMatch ? leadingSpaceMatch[0] : '';
+		const titleCoreWithTrailingSpace = titleWithLeadingSpace.substring(leadingSpace.length);
+
+		const trailingSpaceMatch = /\s*$/.exec(titleCoreWithTrailingSpace);
+		const trailingSpace = trailingSpaceMatch ? trailingSpaceMatch[0] : '';
+		const titleCore = titleCoreWithTrailingSpace.substring(
+			0,
+			Math.max(0, titleCoreWithTrailingSpace.length - trailingSpace.length)
+		);
+
+		const titleCoreCased = titleCaseMarkTitlePreservingBackticks(titleCore);
+		const rebuiltAfterSlashes =
+			afterSlashes.substring(0, afterColonIndex) +
+			structuralPrefixAfterColon +
+			leadingSpace +
+			titleCoreCased +
+			trailingSpace;
+
+		const rebuiltLine = indent + slashes + rebuiltAfterSlashes;
+		if (rebuiltLine === line) continue;
+
+		edits.push({ startLine: i, endLine: i, text: rebuiltLine.split('\n').join(eol) });
+	}
+
+	return edits;
+}
+
+function titleCaseMarkTitlePreservingBackticks(input: string): string {
+	if (input.length === 0) return input;
+
+	let out = '';
+	let inBackticks = false;
+	let segmentStart = 0;
+
+	const flushSegment = (endExclusive: number) => {
+		if (endExclusive <= segmentStart) return;
+		const segment = input.substring(segmentStart, endExclusive);
+		out += inBackticks ? segment : titleCaseMarkTextSegment(segment);
+	};
+
+	for (let i = 0; i < input.length; i++) {
+		if (input[i] !== '`') continue;
+		flushSegment(i);
+		out += '`';
+		inBackticks = !inBackticks;
+		segmentStart = i + 1;
+	}
+
+	flushSegment(input.length);
+	return out;
+}
+
+function titleCaseMarkTextSegment(segment: string): string {
+	// Preserve whitespace exactly.
+	const parts = segment.split(/(\s+)/);
+	return parts
+		.map((p) => {
+			if (p.length === 0) return p;
+			if (/^\s+$/.test(p)) return p;
+			return titleCaseMarkToken(p);
+		})
+		.join('');
+}
+
+function titleCaseMarkToken(token: string): string {
+	// Conservative behavior: leave identifier-like tokens intact.
+	// This includes snake_case, kebab-case, and tokens containing digits.
+	if (token.includes('_') || token.includes('-') || /\d/.test(token)) {
+		return token;
+	}
+
+	// Split out leading/trailing non-letter punctuation so we can title-case "word," -> "Word,".
+	const match = /^([^A-Za-z]*)([A-Za-z][A-Za-z']*)([^A-Za-z]*)$/.exec(token);
+	if (!match) return token;
+
+	const [, leading, word, trailing] = match;
+	if (word !== word.toLowerCase()) {
+		return token;
+	}
+
+	const cased = word[0].toUpperCase() + word.substring(1);
+	return leading + cased + trailing;
+}
+
 function wrapCommentBlock(
 	blockLines: readonly string[],
 	maxLineLength: number,

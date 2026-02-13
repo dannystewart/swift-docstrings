@@ -1,12 +1,17 @@
 import * as vscode from 'vscode';
 import { DocstringDecorator } from './decorator';
-import { computeConvertLineCommentsToDocCommentInserts, computeWrapCommentsReplaceEdits } from './commentCommands';
+import {
+    computeConvertLineCommentsToDocCommentInserts,
+    computeTitleCaseMarkCommentsReplaceEdits,
+    computeWrapCommentsReplaceEdits,
+} from './commentCommands';
 
 let decorator: DocstringDecorator | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 const CONVERT_COMMAND_ID = 'xcodeComments.convertLineCommentsToDocComments';
 const WRAP_COMMAND_ID = 'xcodeComments.wrapCommentsToLineLength';
+const TITLE_CASE_MARK_COMMAND_ID = 'xcodeComments.titleCaseMarkComments';
 
 export function activate(context: vscode.ExtensionContext) {
     decorator = new DocstringDecorator();
@@ -64,6 +69,42 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (replacements.length === 0) {
                 await vscode.window.showInformationMessage('No comments needed wrapping.');
+                return;
+            }
+
+            const sorted = replacements.slice().sort((a, b) => b.startLine - a.startLine);
+            const ok = await editor.edit((editBuilder) => {
+                for (const rep of sorted) {
+                    const endChar = editor.document.lineAt(rep.endLine).text.length;
+                    const range = new vscode.Range(rep.startLine, 0, rep.endLine, endChar);
+                    editBuilder.replace(range, rep.text);
+                }
+            });
+
+            if (ok) {
+                decorator?.applyDecorations(editor);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(TITLE_CASE_MARK_COMMAND_ID, async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                await vscode.window.showInformationMessage('No active editor.');
+                return;
+            }
+            if (editor.document.languageId !== 'swift') {
+                await vscode.window.showInformationMessage('This command only works for Swift files.');
+                return;
+            }
+
+            const eol = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+            const lines = Array.from({ length: editor.document.lineCount }, (_, i) => editor.document.lineAt(i).text);
+            const replacements = computeTitleCaseMarkCommentsReplaceEdits(lines, eol);
+
+            if (replacements.length === 0) {
+                await vscode.window.showInformationMessage('No // MARK: titles needed changes.');
                 return;
             }
 
