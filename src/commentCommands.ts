@@ -423,7 +423,12 @@ function wrapCommentBlock(
 				flushParagraph(paragraph);
 				listMode = false;
 
-				const { keywordPrefixText: rawKeywordPrefixText, description, tagWordLower } = docTag;
+				const {
+					keywordPrefixText: rawKeywordPrefixText,
+					listPrefixText: rawListPrefixText,
+					description,
+					tagWordLower,
+				} = docTag;
 
 				// Ensure we never emit more than one leading whitespace character between the
 				// doc comment prefix (`///`) and the first non-whitespace character of text.
@@ -432,15 +437,27 @@ function wrapCommentBlock(
 				const renderedKeywordPrefixText = shouldNormalizeLeadingWhitespace
 					? normalizeDocTagKeywordPrefixText(rawKeywordPrefixText)
 					: rawKeywordPrefixText;
-				const renderedContinuationPrefix = ' '.repeat(renderedKeywordPrefixText.length);
-				const rawContinuationPrefix = ' '.repeat(rawKeywordPrefixText.length);
+				const renderedListPrefixText = shouldNormalizeLeadingWhitespace
+					? normalizeDocTagKeywordPrefixText(rawListPrefixText)
+					: rawListPrefixText;
+
+				// Continuation lines should be indented consistently relative to the list bullet
+				// (i.e. aligned after "- "), rather than aligning to the varying item name length.
+				const renderedListContinuationPrefix = ' '.repeat(renderedListPrefixText.length);
+
+				// Accept both legacy (description-aligned) and new (list-prefix-aligned) continuation styles.
+				const rawDescContinuationPrefix = ' '.repeat(rawKeywordPrefixText.length);
+				const renderedDescContinuationPrefix = ' '.repeat(renderedKeywordPrefixText.length);
+				const rawListContinuationPrefix = ' '.repeat(rawListPrefixText.length);
+				const renderedListContinuationPrefixAlt = ' '.repeat(renderedListPrefixText.length);
 
 				let descParts: string[] = [];
 				if (description.trim().length > 0) {
 					descParts.push(description.trim());
 				}
 
-				// Consume aligned continuation lines: `///` + spaces aligning to description start.
+				// Consume aligned continuation lines: `///` + spaces aligning to either description start
+				// (legacy) or list prefix (current).
 				let j = i + 1;
 				for (; j < parts.length; j++) {
 					const next = parts[j] as CommentLineParts;
@@ -452,10 +469,15 @@ function wrapCommentBlock(
 					if (isDirectiveLine(nextAfterTrimStart) || isTableOrAsciiArtLine(nextAfterTrimStart)) break;
 					if (isMarkdownListItem(nextAfterTrimStart)) break;
 					let matchedPrefix: string | null = null;
-					if (nextAfter.startsWith(rawContinuationPrefix)) {
-						matchedPrefix = rawContinuationPrefix;
-					} else if (nextAfter.startsWith(renderedContinuationPrefix)) {
-						matchedPrefix = renderedContinuationPrefix;
+					// Prefer longer prefixes first to avoid a shorter match stealing a longer one.
+					if (nextAfter.startsWith(rawDescContinuationPrefix)) {
+						matchedPrefix = rawDescContinuationPrefix;
+					} else if (nextAfter.startsWith(renderedDescContinuationPrefix)) {
+						matchedPrefix = renderedDescContinuationPrefix;
+					} else if (nextAfter.startsWith(rawListContinuationPrefix)) {
+						matchedPrefix = rawListContinuationPrefix;
+					} else if (nextAfter.startsWith(renderedListContinuationPrefixAlt)) {
+						matchedPrefix = renderedListContinuationPrefixAlt;
 					}
 					if (!matchedPrefix) break;
 
@@ -481,7 +503,7 @@ function wrapCommentBlock(
 					const firstLine = wrappedDesc[0];
 					output.push(indent + prefix + renderedKeywordPrefixText + firstLine);
 					for (let k = 1; k < wrappedDesc.length; k++) {
-						output.push(indent + prefix + renderedContinuationPrefix + wrappedDesc[k]);
+						output.push(indent + prefix + renderedListContinuationPrefix + wrappedDesc[k]);
 					}
 				}
 
@@ -527,12 +549,18 @@ function normalizeDocTagKeywordPrefixText(keywordPrefixText: string): string {
 	return ' ' + keywordPrefixText.trimStart();
 }
 
-function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; description: string; tagWordLower: string } | null {
+function tryParseDocTagLine(afterPrefix: string): {
+	keywordPrefixText: string;
+	listPrefixText: string;
+	description: string;
+	tagWordLower: string;
+} | null {
 	const spMatch = docTagSingleParamRegex.exec(afterPrefix);
 	if (spMatch) {
 		const [, prefix, keyword, space, name, colon, description] = spMatch;
 		return {
 			keywordPrefixText: `${prefix}${keyword}${space}${name}${colon}`,
+			listPrefixText: prefix,
 			description,
 			tagWordLower: keyword.toLowerCase(),
 		};
@@ -543,6 +571,7 @@ function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; d
 		const [, prefix, word, colon, description] = keywordMatch;
 		return {
 			keywordPrefixText: `${prefix}${word}${colon}`,
+			listPrefixText: prefix,
 			description,
 			tagWordLower: word.toLowerCase(),
 		};

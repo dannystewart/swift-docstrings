@@ -676,10 +676,10 @@ suite('Extension Test Suite', () => {
 		assert.ok(wrapped[1].startsWith('///   - foo:'), `Expected bullet indentation to be preserved: ${wrapped[1]}`);
 		assert.ok(!wrapped[1].startsWith('/// - foo:'), `Expected bullet indentation not to be collapsed: ${wrapped[1]}`);
 
-		// Continuation should align to the description start (i.e. after "   - foo: ").
+		// Continuation should align consistently after the list bullet (i.e. after "   - ").
 		assert.ok(
-			wrapped[2].startsWith('///' + ' '.repeat(10)),
-			`Expected continuation to start with /// + 10 spaces: ${wrapped[2]}`
+			wrapped[2].startsWith('///' + ' '.repeat(5)),
+			`Expected continuation to start with /// + 5 spaces: ${wrapped[2]}`
 		);
 		assert.ok(!wrapped[2].includes('- foo:'), `Expected continuation to omit the bullet prefix: ${wrapped[2]}`);
 	});
