@@ -250,6 +250,58 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('Bolds all-caps callout labels including the colon', async () => {
+		const content = ['struct Foo {', '    // NOTE: This is a note', '}'].join('\n');
+
+		const doc = await vscode.workspace.openTextDocument({ language: 'swift', content });
+		const editor = await vscode.window.showTextDocument(doc);
+
+		const calls: Array<{ ranges: readonly vscode.Range[] }> = [];
+		const originalSetDecorations = editor.setDecorations.bind(editor);
+		const spySetDecorations = (decorationType: vscode.TextEditorDecorationType, ranges: readonly vscode.Range[]) => {
+			calls.push({ ranges: Array.from(ranges) });
+			originalSetDecorations(decorationType, ranges);
+		};
+
+		try {
+			Object.defineProperty(editor, 'setDecorations', { value: spySetDecorations });
+		} catch {
+			(editor as unknown as { setDecorations: typeof spySetDecorations }).setDecorations = spySetDecorations;
+		}
+
+		try {
+			const decorator = new DocstringDecorator();
+			decorator.applyDecorations(editor);
+
+			const lineNum = 1;
+			const lineText = doc.lineAt(lineNum).text;
+			const commentStart = lineText.indexOf('//');
+			assert.ok(commentStart >= 0, 'Expected // comment');
+
+			const noteIndex = lineText.indexOf('NOTE', commentStart);
+			const colonIndex = lineText.indexOf(':', noteIndex);
+			assert.ok(noteIndex >= 0 && colonIndex > noteIndex, 'Expected NOTE: in comment');
+
+			const rangeKey = (r: vscode.Range) =>
+				`${r.start.line}:${r.start.character}-${r.end.line}:${r.end.character}`;
+
+			const expectedLabel = new vscode.Range(lineNum, noteIndex, lineNum, noteIndex + 4); // NOTE
+			const expectedColon = new vscode.Range(lineNum, colonIndex, lineNum, colonIndex + 1); // :
+
+			const allRanges = calls.flatMap((c) => Array.from(c.ranges));
+			const actualKeys = allRanges.map(rangeKey);
+
+			assert.ok(actualKeys.includes(rangeKey(expectedLabel)), `Expected NOTE label to be bolded: ${rangeKey(expectedLabel)}`);
+			assert.ok(actualKeys.includes(rangeKey(expectedColon)), `Expected colon to be bolded: ${rangeKey(expectedColon)}`);
+		} finally {
+			try {
+				Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
+			} catch {
+				(editor as unknown as { setDecorations: typeof originalSetDecorations }).setDecorations = originalSetDecorations;
+			}
+		}
+	});
+
 	test('Does not apply MARK separator line to plain // MARK: (no dash)', async () => {
 		const config = vscode.workspace.getConfiguration('swiftDocstrings');
 		await config.update('markSeparatorLines', true, true);

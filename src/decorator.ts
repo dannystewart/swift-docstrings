@@ -250,9 +250,13 @@ export class DocstringDecorator {
             const match = findLeadingCapsLabel(line.text.substring(afterPrefixStart));
             if (!match) continue;
 
-            const absStart = afterPrefixStart + match.labelStart;
-            const absEnd = afterPrefixStart + match.labelEnd;
-            capsLabelRanges.push(new vscode.Range(i, absStart, i, absEnd));
+            const absLabelStart = afterPrefixStart + match.labelStart;
+            const absLabelEnd = afterPrefixStart + match.labelEnd;
+            capsLabelRanges.push(new vscode.Range(i, absLabelStart, i, absLabelEnd));
+
+            // Bold the colon too, without bolding any whitespace that might precede it.
+            const absColonStart = afterPrefixStart + match.colonIndex;
+            capsLabelRanges.push(new vscode.Range(i, absColonStart, i, absColonStart + 1));
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
