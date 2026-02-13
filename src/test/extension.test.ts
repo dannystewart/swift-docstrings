@@ -59,11 +59,19 @@ suite('Extension Test Suite', () => {
 			const matchingCalls = calls.filter((c) => c.ranges.some((r) => expectedMarkLines.includes(r.start.line)));
 			assert.strictEqual(
 				matchingCalls.length,
-				1,
-				'Expected exactly one decoration call affecting // MARK: lines.'
+				2,
+				'Expected two decoration calls affecting // MARK: lines (bold + separator for MARK: -).'
 			);
 
-			const markRanges = matchingCalls[0].ranges;
+			const boldCall = matchingCalls.find((c) => c.ranges.some((r) => r.start.character > 0 || r.end.character > 0));
+			const separatorCall = matchingCalls.find((c) =>
+				c.ranges.some((r) => r.start.character === 0 && r.end.character === 0)
+			);
+
+			assert.ok(boldCall, 'Expected a decoration call for bold MARK ranges.');
+			assert.ok(separatorCall, 'Expected a decoration call for MARK separator line ranges.');
+
+			const markRanges = boldCall.ranges;
 
 			// Ensure only the expected MARK lines are included (no false positives).
 			const markLines = Array.from(new Set(markRanges.map((r) => r.start.line))).sort((a, b) => a - b);
@@ -72,6 +80,17 @@ suite('Extension Test Suite', () => {
 			const actualKeys = markRanges.map(rangeKey).sort();
 			const expectedKeys = expectedRanges.map(rangeKey).sort();
 			assert.deepStrictEqual(actualKeys, expectedKeys);
+
+			// Separator line should apply only to the MARK: - variants (not plain MARK:).
+			const expectedSeparatorLines = [1, 2, 3];
+			const separatorRanges = separatorCall.ranges;
+			const separatorLines = Array.from(new Set(separatorRanges.map((r) => r.start.line))).sort((a, b) => a - b);
+			assert.deepStrictEqual(separatorLines, expectedSeparatorLines);
+
+			for (const r of separatorRanges) {
+				assert.strictEqual(r.start.character, 0, 'Expected separator decoration to be whole-line anchored at column 0.');
+				assert.strictEqual(r.end.character, 0, 'Expected separator decoration to be whole-line anchored at column 0.');
+			}
 
 			// Explicit non-matches should not be decorated.
 			assert.ok(!markLines.includes(5), 'Did not expect to decorate `// MARK:foo ...`');
@@ -89,6 +108,7 @@ suite('Extension Test Suite', () => {
 	test('Does not bold // MARK: lines when disabled in settings', async () => {
 		const config = vscode.workspace.getConfiguration('swiftDocstrings');
 		await config.update('boldMarkLines', false, true);
+		await config.update('markSeparatorLines', true, true);
 
 		try {
 			const content = [
@@ -122,7 +142,15 @@ suite('Extension Test Suite', () => {
 
 				const markLine = 1;
 				const callsAffectingMarkLine = calls.filter((c) => c.ranges.some((r) => r.start.line === markLine));
-				assert.strictEqual(callsAffectingMarkLine.length, 0, 'Expected no decorations applied to // MARK: line.');
+				assert.strictEqual(callsAffectingMarkLine.length, 1, 'Expected only the separator decoration to apply to // MARK: - line.');
+
+				const ranges = callsAffectingMarkLine[0].ranges;
+				assert.ok(ranges.length >= 1, 'Expected at least one separator range.');
+				for (const r of ranges) {
+					assert.strictEqual(r.start.line, markLine);
+					assert.strictEqual(r.start.character, 0);
+					assert.strictEqual(r.end.character, 0);
+				}
 			} finally {
 				try {
 					Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
@@ -132,6 +160,7 @@ suite('Extension Test Suite', () => {
 			}
 		} finally {
 			await config.update('boldMarkLines', undefined, true);
+			await config.update('markSeparatorLines', undefined, true);
 		}
 	});
 
@@ -218,6 +247,59 @@ suite('Extension Test Suite', () => {
 			}
 		} finally {
 			await config.update('codeColor', undefined, true);
+		}
+	});
+
+	test('Does not apply MARK separator line to plain // MARK: (no dash)', async () => {
+		const config = vscode.workspace.getConfiguration('swiftDocstrings');
+		await config.update('markSeparatorLines', true, true);
+
+		try {
+			const content = [
+				'struct Foo {',
+				'    // MARK: - HasLine',
+				'    // MARK: NoLine',
+				'}',
+				'',
+			].join('\n');
+
+			const doc = await vscode.workspace.openTextDocument({ language: 'swift', content });
+			const editor = await vscode.window.showTextDocument(doc);
+
+			const calls: Array<{ ranges: readonly vscode.Range[] }> = [];
+
+			const originalSetDecorations = editor.setDecorations.bind(editor);
+			const spySetDecorations = (decorationType: vscode.TextEditorDecorationType, ranges: readonly vscode.Range[]) => {
+				calls.push({ ranges: Array.from(ranges) });
+				originalSetDecorations(decorationType, ranges);
+			};
+
+			try {
+				Object.defineProperty(editor, 'setDecorations', { value: spySetDecorations });
+			} catch {
+				(editor as unknown as { setDecorations: typeof spySetDecorations }).setDecorations = spySetDecorations;
+			}
+
+			try {
+				const decorator = new DocstringDecorator();
+				decorator.applyDecorations(editor);
+
+				// The separator decoration uses whole-line anchored ranges (0..0).
+				const separatorRanges = calls
+					.flatMap((c) => Array.from(c.ranges))
+					.filter((r) => r.start.character === 0 && r.end.character === 0);
+
+				const separatorLines = Array.from(new Set(separatorRanges.map((r) => r.start.line))).sort((a, b) => a - b);
+				assert.deepStrictEqual(separatorLines, [1], 'Expected separator line only for // MARK: - line.');
+			} finally {
+				try {
+					Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
+				} catch {
+					(editor as unknown as { setDecorations: typeof originalSetDecorations }).setDecorations = originalSetDecorations;
+				}
+			}
+		} finally {
+			await config.update('markSeparatorLines', undefined, true);
 		}
 	});
 

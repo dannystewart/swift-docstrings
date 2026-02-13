@@ -68,6 +68,11 @@
           "default": true,
           "description": "Bold the contents of // MARK: comment lines, similar to Xcode."
         },
+        "swiftDocstrings.markSeparatorLines": {
+          "type": "boolean",
+          "default": true,
+          "description": "Draw a subtle separator line above // MARK: - lines, similar to Xcode."
+        },
         "swiftDocstrings.maxCommentLineLength": {
           "type": "integer",
           "default": 100,

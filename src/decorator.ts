@@ -12,6 +12,12 @@ const docLineRegex = /^(\s*)(\/\/\/)(.*)?$/;
 // Group 3: everything after // that begins with MARK:
 const markLineRegex = /^(\s*)(\/\/)(\s*MARK:(?=\s|$|-).*)$/;
 
+// Matches a line that is a // MARK: - ... separator comment (Xcode-like).
+// Group 1: leading whitespace
+// Group 2: the // prefix
+// Group 3: everything after // that begins with MARK: and includes the separator dash
+const markSeparatorLineRegex = /^(\s*)(\/\/)(\s*MARK:\s*-\s*(?:.*)?)$/;
+
 // Matches "- Parameter name:" form (singular, with an explicit parameter name).
 // Groups: (prefix)(Parameter)(space)(name)(colon+space)(description)
 const singleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
@@ -81,6 +87,7 @@ export class DocstringDecorator {
     private italicDecoration: vscode.TextEditorDecorationType;
     private boldItalicDecoration: vscode.TextEditorDecorationType;
     private markDecoration: vscode.TextEditorDecorationType;
+    private markSeparatorDecoration: vscode.TextEditorDecorationType;
     private capsLabelDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
@@ -97,6 +104,7 @@ export class DocstringDecorator {
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
         this.markDecoration = types.markDeco;
+        this.markSeparatorDecoration = types.markSeparatorDeco;
         this.capsLabelDecoration = types.capsLabelDeco;
     }
 
@@ -115,6 +123,7 @@ export class DocstringDecorator {
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
         this.markDecoration.dispose();
+        this.markSeparatorDecoration.dispose();
         this.capsLabelDecoration.dispose();
 
         const config = vscode.workspace.getConfiguration('swiftDocstrings');
@@ -130,6 +139,7 @@ export class DocstringDecorator {
         this.italicDecoration = types.italicDeco;
         this.boldItalicDecoration = types.boldItalicDeco;
         this.markDecoration = types.markDeco;
+        this.markSeparatorDecoration = types.markSeparatorDeco;
         this.capsLabelDecoration = types.capsLabelDeco;
     }
 
@@ -149,6 +159,7 @@ export class DocstringDecorator {
         }
 
         const boldMarkLines = config.get<boolean>('boldMarkLines', true);
+        const markSeparatorLines = config.get<boolean>('markSeparatorLines', true);
         const codeColor = config.get<string>('codeColor', '') || undefined;
 
         const slashRanges: vscode.Range[] = [];
@@ -161,6 +172,7 @@ export class DocstringDecorator {
         const italicRanges: vscode.Range[] = [];
         const boldItalicRanges: vscode.Range[] = [];
         const markRanges: vscode.Range[] = [];
+        const markSeparatorRanges: vscode.Range[] = [];
         const regularCommentInlineCodeColorRanges: vscode.Range[] = [];
         const capsLabelRanges: vscode.Range[] = [];
 
@@ -268,6 +280,17 @@ export class DocstringDecorator {
         editor.setDecorations(this.boldItalicDecoration, boldItalicRanges);
         editor.setDecorations(this.capsLabelDecoration, capsLabelRanges);
 
+        if (markSeparatorLines) {
+            // Add a subtle full-width separator line above // MARK: - ... lines (Xcode-like).
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                if (!markSeparatorLineRegex.test(line.text)) continue;
+                // Whole-line decoration; range content is irrelevant when isWholeLine is true.
+                markSeparatorRanges.push(new vscode.Range(i, 0, i, 0));
+            }
+        }
+        editor.setDecorations(this.markSeparatorDecoration, markSeparatorRanges);
+
         if (boldMarkLines) {
             // Bold // MARK: lines (Xcode-like), but keep the // prefix at normal weight.
             for (let i = 0; i < document.lineCount; i++) {
@@ -301,6 +324,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.italicDecoration, []);
         editor.setDecorations(this.boldItalicDecoration, []);
         editor.setDecorations(this.markDecoration, []);
+        editor.setDecorations(this.markSeparatorDecoration, []);
         editor.setDecorations(this.capsLabelDecoration, []);
     }
 
@@ -319,6 +343,7 @@ export class DocstringDecorator {
         this.italicDecoration.dispose();
         this.boldItalicDecoration.dispose();
         this.markDecoration.dispose();
+        this.markSeparatorDecoration.dispose();
         this.capsLabelDecoration.dispose();
     }
 
@@ -433,6 +458,17 @@ export class DocstringDecorator {
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
         });
 
+        // Subtle, full-width separator line above // MARK: - ... lines.
+        //
+        // Use a whole-line decoration border so it spans the full editor width.
+        const markSeparatorDeco = vscode.window.createTextEditorDecorationType({
+            isWholeLine: true,
+            borderWidth: '1px 0 0 0',
+            borderStyle: 'solid',
+            borderColor:
+                'color-mix(in srgb, var(--vscode-editorLineNumber-foreground) 40%, transparent)',
+        });
+
         // Bold-only decoration that intentionally does not change font family. This allows:
         // - regular // comments to remain monospace
         // - /// doc comment text to remain proportional (from the doc decorations)
@@ -440,7 +476,21 @@ export class DocstringDecorator {
             fontWeight: 'bold',
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, regularCommentInlineCodeColorDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco, capsLabelDeco };
+        return {
+            slashDeco,
+            indentDeco,
+            textDeco,
+            codeDeco,
+            regularCommentInlineCodeColorDeco,
+            keywordDeco,
+            markdownMarkerDeco,
+            boldDeco,
+            italicDeco,
+            boldItalicDeco,
+            markDeco,
+            markSeparatorDeco,
+            capsLabelDeco,
+        };
     }
 
     // -- Private: Parsing --
