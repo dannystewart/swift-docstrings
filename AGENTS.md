@@ -19,12 +19,12 @@ This is a VS Code extension that renders Swift `///` doc comments in a proportio
     - `indentDecoration`: Structural whitespace, dashes, colons (monospace for alignment)
     - `textDecoration`: Regular doc text (proportional font)
     - `codeDecoration`: Inline code in backticks and parameter names (monospace)
-    - `tagDecoration`: Doc tag keywords like `Parameters`, `Returns`, etc. (proportional, optionally colored)
+    - `keywordDecoration`: Doc keywords like `Parameters`, `Returns`, etc. (proportional, optionally colored)
   - Parses each `///` line to identify:
-    - Doc tag patterns (`- Parameter name:`, `- Returns:`, etc.)
+    - Doc keyword patterns (`- Parameter name:`, `- Returns:`, etc.)
     - Inline code segments (backtick-wrapped)
     - Leading whitespace for structural alignment
-  - Uses regex matching for Swift doc comment patterns and known tag keywords
+  - Uses regex matching for Swift doc comment patterns and known keywords
 
 ### Configuration
 
@@ -34,7 +34,7 @@ Settings in `package.json` under `swiftDocstrings.*`:
 - `fontFamily`: Proportional font for doc text
 - `fontSize`: Optional size override
 - `codeColor`: Color for inline code and parameter names
-- `tagColor`: Color for doc tag keywords
+- `keywordColor`: Color for doc keywords
 
 ## Key Technical Details
 

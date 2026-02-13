@@ -53,10 +53,10 @@
           "default": "",
           "description": "Color for inline code (backtick-wrapped text and parameter names). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         },
-        "swiftDocstrings.tagColor": {
+        "swiftDocstrings.keywordColor": {
           "type": "string",
           "default": "",
-          "description": "Color for doc tag keywords (Parameters, Returns, Throws, etc.). Accepts any CSS color value. Leave empty to inherit the doc comment color."
+          "description": "Color for doc keywords (Parameters, Returns, Throws, etc.). Accepts any CSS color value. Leave empty to inherit the doc comment color."
         },
         "swiftDocstrings.boldMarkLines": {
           "type": "boolean",

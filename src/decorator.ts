@@ -18,7 +18,7 @@ const singleParamRegex = /^(\s*-\s+)(Parameter)(\s+)(\w+)(\s*:\s*)(.*)/i;
 
 // Matches "- Word:" form (section headers like Returns:, or parameter names under Parameters:).
 // Groups: (prefix)(word)(colon+space)(description)
-const tagLineRegex = /^(\s*-\s+)(\w+)(\s*:\s*)(.*)/;
+const keywordLineRegex = /^(\s*-\s+)(\w+)(\s*:\s*)(.*)/;
 
 // All recognized Swift documentation callout keywords (lowercase for comparison).
 const KNOWN_TAGS = new Set([
@@ -37,7 +37,7 @@ interface DocCommentSegments {
     indentRanges: vscode.Range[];
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
-    tagRanges: vscode.Range[];
+    keywordRanges: vscode.Range[];
     boldRanges: vscode.Range[];
     italicRanges: vscode.Range[];
     boldItalicRanges: vscode.Range[];
@@ -54,7 +54,7 @@ interface DocBlockSegments {
     indentRanges: vscode.Range[];
     textRanges: vscode.Range[];
     codeRanges: vscode.Range[];
-    tagRanges: vscode.Range[];
+    keywordRanges: vscode.Range[];
     markdownMarkerRanges: vscode.Range[];
     boldRanges: vscode.Range[];
     italicRanges: vscode.Range[];
@@ -74,7 +74,7 @@ export class DocstringDecorator {
     private indentDecoration: vscode.TextEditorDecorationType;
     private textDecoration: vscode.TextEditorDecorationType;
     private codeDecoration: vscode.TextEditorDecorationType;
-    private tagDecoration: vscode.TextEditorDecorationType;
+    private keywordDecoration: vscode.TextEditorDecorationType;
     private markdownMarkerDecoration: vscode.TextEditorDecorationType;
     private boldDecoration: vscode.TextEditorDecorationType;
     private italicDecoration: vscode.TextEditorDecorationType;
@@ -88,7 +88,7 @@ export class DocstringDecorator {
         this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
-        this.tagDecoration = types.tagDeco;
+        this.keywordDecoration = types.keywordDeco;
         this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
@@ -104,7 +104,7 @@ export class DocstringDecorator {
         this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
-        this.tagDecoration.dispose();
+        this.keywordDecoration.dispose();
         this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
@@ -117,7 +117,7 @@ export class DocstringDecorator {
         this.indentDecoration = types.indentDeco;
         this.textDecoration = types.textDeco;
         this.codeDecoration = types.codeDeco;
-        this.tagDecoration = types.tagDeco;
+        this.keywordDecoration = types.keywordDeco;
         this.markdownMarkerDecoration = types.markdownMarkerDeco;
         this.boldDecoration = types.boldDeco;
         this.italicDecoration = types.italicDeco;
@@ -146,7 +146,7 @@ export class DocstringDecorator {
         const indentRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
-        const tagRanges: vscode.Range[] = [];
+        const keywordRanges: vscode.Range[] = [];
         const markdownMarkerRanges: vscode.Range[] = [];
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
@@ -178,7 +178,7 @@ export class DocstringDecorator {
             indentRanges.push(...block.indentRanges);
             textRanges.push(...block.textRanges);
             codeRanges.push(...block.codeRanges);
-            tagRanges.push(...block.tagRanges);
+            keywordRanges.push(...block.keywordRanges);
             markdownMarkerRanges.push(...block.markdownMarkerRanges);
             boldRanges.push(...block.boldRanges);
             italicRanges.push(...block.italicRanges);
@@ -189,7 +189,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.indentDecoration, indentRanges);
         editor.setDecorations(this.textDecoration, textRanges);
         editor.setDecorations(this.codeDecoration, codeRanges);
-        editor.setDecorations(this.tagDecoration, tagRanges);
+        editor.setDecorations(this.keywordDecoration, keywordRanges);
         editor.setDecorations(this.markdownMarkerDecoration, markdownMarkerRanges);
         editor.setDecorations(this.boldDecoration, boldRanges);
         editor.setDecorations(this.italicDecoration, italicRanges);
@@ -221,7 +221,7 @@ export class DocstringDecorator {
         editor.setDecorations(this.indentDecoration, []);
         editor.setDecorations(this.textDecoration, []);
         editor.setDecorations(this.codeDecoration, []);
-        editor.setDecorations(this.tagDecoration, []);
+        editor.setDecorations(this.keywordDecoration, []);
         editor.setDecorations(this.markdownMarkerDecoration, []);
         editor.setDecorations(this.boldDecoration, []);
         editor.setDecorations(this.italicDecoration, []);
@@ -237,7 +237,7 @@ export class DocstringDecorator {
         this.indentDecoration.dispose();
         this.textDecoration.dispose();
         this.codeDecoration.dispose();
-        this.tagDecoration.dispose();
+        this.keywordDecoration.dispose();
         this.markdownMarkerDecoration.dispose();
         this.boldDecoration.dispose();
         this.italicDecoration.dispose();
@@ -283,23 +283,23 @@ export class DocstringDecorator {
             ...(codeColor ? { color: codeColor } : {}),
         });
 
-        // Lighter proportional font for doc tag keywords (Parameters, Returns, etc.)
-        let tagCss = `none; font-family: ${fontFamily}; font-style: normal`;
+        // Lighter proportional font for doc keywords (Parameters, Returns, etc.)
+        let keywordCss = `none; font-family: ${fontFamily}; font-style: normal`;
         if (fontSize) {
-            tagCss += `; font-size: ${fontSize}`;
+            keywordCss += `; font-size: ${fontSize}`;
         }
 
-        const tagColor = config.get<string>('tagColor', '') || undefined;
+        const keywordColor = config.get<string>('keywordColor', '') || undefined;
 
-        const tagDeco = vscode.window.createTextEditorDecorationType({
-            textDecoration: tagCss,
-            ...(tagColor ? { color: tagColor } : {}),
+        const keywordDeco = vscode.window.createTextEditorDecorationType({
+            textDecoration: keywordCss,
+            ...(keywordColor ? { color: keywordColor } : {}),
         });
 
         // Markdown delimiter characters (e.g. *, _, backticks) should remain monospace and
         // inherit the theme's comment color, but appear slightly dimmer like Xcode.
         const markdownMarkerDeco = vscode.window.createTextEditorDecorationType({
-            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; opacity: 0.5',
+            textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; opacity: 0.6',
         });
 
         // Bold text with proportional font
@@ -337,7 +337,7 @@ export class DocstringDecorator {
             textDecoration: 'none; font-family: var(--vscode-editor-font-family); font-style: normal; font-weight: bold',
         });
 
-        return { slashDeco, indentDeco, textDeco, codeDeco, tagDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
+        return { slashDeco, indentDeco, textDeco, codeDeco, keywordDeco, markdownMarkerDeco, boldDeco, italicDeco, boldItalicDeco, markDeco };
     }
 
     // -- Private: Parsing --
@@ -350,7 +350,7 @@ export class DocstringDecorator {
         const indentRanges: vscode.Range[] = [];
         const textRanges: vscode.Range[] = [];
         const codeRanges: vscode.Range[] = [];
-        const tagRanges: vscode.Range[] = [];
+        const keywordRanges: vscode.Range[] = [];
         const markdownMarkerRanges: vscode.Range[] = [];
         const boldRanges: vscode.Range[] = [];
         const italicRanges: vscode.Range[] = [];
@@ -376,19 +376,19 @@ export class DocstringDecorator {
 
             const contentStart = slashEnd; // absolute column where text after /// begins
 
-            // Try to match doc tag patterns first (they handle their own indent ranges)
-            const tagParsed = this.tryParseDocTag(
+            // Try to match doc keyword patterns first (they handle their own indent ranges)
+            const keywordParsed = this.tryParseDocTag(
                 afterSlash,
                 lineNum,
                 contentStart,
                 indentRanges,
                 codeRanges,
-                tagRanges,
+                keywordRanges,
                 inlineSegments,
             );
 
-            if (!tagParsed) {
-                // No tag -- peel off leading whitespace as monospace indent, then
+            if (!keywordParsed) {
+                // No keyword -- peel off leading whitespace as monospace indent, then
                 // scan the rest for multiline backticks/markdown.
                 const lsMatch = leadingSpaceRegex.exec(afterSlash);
                 if (lsMatch) {
@@ -426,7 +426,7 @@ export class DocstringDecorator {
             indentRanges,
             textRanges,
             codeRanges,
-            tagRanges,
+            keywordRanges,
             markdownMarkerRanges,
             boldRanges,
             italicRanges,
@@ -435,9 +435,9 @@ export class DocstringDecorator {
     }
 
     /**
-     * Attempt to parse a doc tag pattern from the text after ///.
-     * Populates the provided structural range arrays and returns true if a tag was found.
-     * Any tag description is emitted as an inline segment for block-aware scanning.
+     * Attempt to parse a doc keyword pattern from the text after ///.
+     * Populates the provided structural range arrays and returns true if a keyword was found.
+     * Any keyword description is emitted as an inline segment for block-aware scanning.
      *
      * Handles three forms:
      *   - Parameter name: description   (singular with explicit parameter name)
@@ -450,7 +450,7 @@ export class DocstringDecorator {
         offset: number,
         indentRanges: vscode.Range[],
         codeRanges: vscode.Range[],
-        tagRanges: vscode.Range[],
+        keywordRanges: vscode.Range[],
         inlineSegments: InlineSegment[],
     ): boolean {
         // Form: "- Parameter name: description"
@@ -463,8 +463,8 @@ export class DocstringDecorator {
             indentRanges.push(new vscode.Range(lineNum, col, lineNum, col + prefix.length));
             col += prefix.length;
 
-            // "Parameter" -> tag (bold)
-            tagRanges.push(new vscode.Range(lineNum, col, lineNum, col + keyword.length));
+            // "Parameter" -> keyword (bold)
+            keywordRanges.push(new vscode.Range(lineNum, col, lineNum, col + keyword.length));
             col += keyword.length;
 
             // space between keyword and name -> indent (monospace)
@@ -488,9 +488,9 @@ export class DocstringDecorator {
         }
 
         // Form: "- Word: description"
-        const tagMatch = tagLineRegex.exec(text);
-        if (tagMatch) {
-            const [, prefix, word, colon, description] = tagMatch;
+        const keywordMatch = keywordLineRegex.exec(text);
+        if (keywordMatch) {
+            const [, prefix, word, colon, description] = keywordMatch;
             const isKnownTag = KNOWN_TAGS.has(word.toLowerCase());
             let col = offset;
 
@@ -499,8 +499,8 @@ export class DocstringDecorator {
             col += prefix.length;
 
             if (isKnownTag) {
-                // Known keyword -> tag (bold)
-                tagRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
+                // Known keyword -> keyword (bold)
+                keywordRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));
             } else {
                 // Unknown word -> assumed parameter name (monospace)
                 codeRanges.push(new vscode.Range(lineNum, col, lineNum, col + word.length));

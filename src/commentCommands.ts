@@ -164,8 +164,8 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 				flushParagraph(paragraph);
 				listMode = false;
 
-				const { tagPrefixText, description } = docTag;
-				const continuationPrefix = ' '.repeat(tagPrefixText.length);
+				const { keywordPrefixText, description } = docTag;
+				const continuationPrefix = ' '.repeat(keywordPrefixText.length);
 
 				let descParts: string[] = [];
 				if (description.trim().length > 0) {
@@ -192,14 +192,14 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 				}
 
 				const fullDesc = descParts.join(' ').trim();
-				const availableWidth = Math.max(1, maxLineLength - (indent.length + prefix.length + tagPrefixText.length));
+				const availableWidth = Math.max(1, maxLineLength - (indent.length + prefix.length + keywordPrefixText.length));
 				const wrappedDesc = fullDesc.length > 0 ? wrapWords(fullDesc, availableWidth) : [''];
 
 				if (wrappedDesc.length === 0) {
-					output.push(indent + prefix + tagPrefixText.trimEnd());
+					output.push(indent + prefix + keywordPrefixText.trimEnd());
 				} else {
 					const firstLine = wrappedDesc[0];
-					output.push(indent + prefix + tagPrefixText + firstLine);
+					output.push(indent + prefix + keywordPrefixText + firstLine);
 					for (let k = 1; k < wrappedDesc.length; k++) {
 						output.push(indent + prefix + continuationPrefix + wrappedDesc[k]);
 					}
@@ -234,21 +234,21 @@ function wrapCommentBlock(blockLines: readonly string[], maxLineLength: number):
 	return output;
 }
 
-function tryParseDocTagLine(afterPrefix: string): { tagPrefixText: string; description: string } | null {
+function tryParseDocTagLine(afterPrefix: string): { keywordPrefixText: string; description: string } | null {
 	const spMatch = docTagSingleParamRegex.exec(afterPrefix);
 	if (spMatch) {
 		const [, prefix, keyword, space, name, colon, description] = spMatch;
 		return {
-			tagPrefixText: `${prefix}${keyword}${space}${name}${colon}`,
+			keywordPrefixText: `${prefix}${keyword}${space}${name}${colon}`,
 			description,
 		};
 	}
 
-	const tagMatch = docTagLineRegex.exec(afterPrefix);
-	if (tagMatch) {
-		const [, prefix, word, colon, description] = tagMatch;
+	const keywordMatch = docTagLineRegex.exec(afterPrefix);
+	if (keywordMatch) {
+		const [, prefix, word, colon, description] = keywordMatch;
 		return {
-			tagPrefixText: `${prefix}${word}${colon}`,
+			keywordPrefixText: `${prefix}${word}${colon}`,
 			description,
 		};
 	}
@@ -334,4 +334,3 @@ function wrapWords(text: string, maxWidth: number): string[] {
 	if (current.length > 0) lines.push(current);
 	return lines;
 }
-

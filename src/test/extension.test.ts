@@ -187,7 +187,7 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(edits.length, 0);
 	});
 
-	test('Wraps /// doc tag bullets by wrapping only the description and aligning continuation', () => {
+	test('Wraps /// doc keyword bullets by wrapping only the description and aligning continuation', () => {
 		const lines = [
 			'/// - Returns: This is a long return description that should wrap onto continuation lines and stay aligned.',
 		];
@@ -196,9 +196,9 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(edits.length, 1);
 
 		const wrapped = edits[0].text.split('\n');
-		assert.ok(wrapped.length >= 2, 'Expected doc tag wrapping to add continuation lines.');
-		assert.ok(wrapped[0].includes('- Returns:'), 'Expected first line to retain tag prefix.');
-		assert.ok(!wrapped[1].includes('- Returns:'), 'Expected continuation lines to omit tag prefix.');
+		assert.ok(wrapped.length >= 2, 'Expected doc keyword wrapping to add continuation lines.');
+		assert.ok(wrapped[0].includes('- Returns:'), 'Expected first line to retain keyword prefix.');
+		assert.ok(!wrapped[1].includes('- Returns:'), 'Expected continuation lines to omit keyword prefix.');
 		assert.ok(/^\/\/\/\s+/.test(wrapped[1]), `Expected continuation to start with /// and spaces: ${wrapped[1]}`);
 	});
 

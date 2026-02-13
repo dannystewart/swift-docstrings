@@ -8,7 +8,7 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 
 - **Proportional font** for `///` doc comment text
 - **Inline code** in backticks reverts to monospace
-- **Bold doc tags** for keywords like `Parameters`, `Returns`, `Throws`, etc.
+- **Bold doc keywords** for keywords like `Parameters`, `Returns`, `Throws`, etc.
 - **Monospace parameter names** under `Parameters:` blocks
 - **Aligned indentation**—structural whitespace stays monospace so list items line up properly
 
@@ -20,7 +20,7 @@ Regular `//` comments stay monospace. Doc comments with `///` render in a propor
 | `swiftDocstrings.fontFamily` | System sans-serif | Proportional font for doc text |
 | `swiftDocstrings.fontSize` | *(inherit)* | Optional font size override (e.g. `0.95em`, `13px`) |
 | `swiftDocstrings.codeColor` | *(inherit)* | Color for inline code and parameter names |
-| `swiftDocstrings.tagColor` | *(inherit)* | Color for doc tag keywords (Parameters, Returns, etc.) |
+| `swiftDocstrings.keywordColor` | *(inherit)* | Color for doc keywords (Parameters, Returns, etc.) |
 | `swiftDocstrings.boldMarkLines` | `true` | Bold the contents of `// MARK:` comment lines, similar to Xcode |
 | `swiftDocstrings.maxCommentLineLength` | `100` | Maximum line length for the Wrap Comments command |
 
