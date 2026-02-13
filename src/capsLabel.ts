@@ -65,3 +65,66 @@ export function findLeadingCapsLabel(afterPrefix: string): CapsLabelMatch | null
 	};
 }
 
+export interface DocColonHeadingMatch {
+	/**
+	 * Index in the provided string where the heading starts (after leading whitespace).
+	 */
+	headingStart: number;
+	/**
+	 * Index in the provided string where the heading ends (exclusive), excluding whitespace
+	 * that might precede the colon.
+	 */
+	headingEnd: number;
+	/**
+	 * Index in the provided string of the colon that terminates the heading.
+	 */
+	colonIndex: number;
+	/**
+	 * The raw heading text (without the colon), preserving internal whitespace.
+	 */
+	headingText: string;
+}
+
+/**
+ * Detects a non-list "section heading" in a doc comment line that ends with a colon.
+ *
+ * Pass the string that begins immediately after the doc comment prefix (`///`).
+ * For example, for `/// Notes:`, pass `" Notes:"` (including any original spacing).
+ *
+ * This function is intentionally shared between decoration and wrapping so behavior matches.
+ */
+export function findDocColonHeading(afterPrefix: string): DocColonHeadingMatch | null {
+	let headingStart = 0;
+	while (headingStart < afterPrefix.length && /\s/.test(afterPrefix[headingStart])) {
+		headingStart++;
+	}
+	if (headingStart >= afterPrefix.length) return null;
+
+	// Require the last non-whitespace character to be a colon.
+	let endTrim = afterPrefix.length;
+	while (endTrim > headingStart && /\s/.test(afterPrefix[endTrim - 1])) {
+		endTrim--;
+	}
+	if (endTrim <= headingStart) return null;
+	if (afterPrefix[endTrim - 1] !== ':') return null;
+
+	const colonIndex = endTrim - 1;
+
+	// Exclude any whitespace that precedes the colon from the heading span.
+	let headingEnd = colonIndex;
+	while (headingEnd > headingStart && /\s/.test(afterPrefix[headingEnd - 1])) {
+		headingEnd--;
+	}
+	if (headingEnd <= headingStart) return null;
+
+	const candidate = afterPrefix.substring(headingStart, headingEnd);
+	if (!/^[A-Za-z0-9_]+(?:[ \t]+[A-Za-z0-9_]+)*$/.test(candidate)) return null;
+
+	return {
+		headingStart,
+		headingEnd,
+		colonIndex,
+		headingText: candidate,
+	};
+}
+

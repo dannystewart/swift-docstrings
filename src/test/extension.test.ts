@@ -440,6 +440,57 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('Bolds non-list /// heading lines that end with a colon (e.g. Notes:)', async () => {
+		const content = ['struct Foo {', '    /// Implementation Notes:', '    /// - Notes: Not a heading', '}'].join(
+			'\n'
+		);
+
+		const doc = await vscode.workspace.openTextDocument({ language: 'swift', content });
+		const editor = await vscode.window.showTextDocument(doc);
+
+		const calls: Array<{ ranges: readonly vscode.Range[] }> = [];
+		const originalSetDecorations = editor.setDecorations.bind(editor);
+		const spySetDecorations = (decorationType: vscode.TextEditorDecorationType, ranges: readonly vscode.Range[]) => {
+			calls.push({ ranges: Array.from(ranges) });
+			originalSetDecorations(decorationType, ranges);
+		};
+
+		try {
+			Object.defineProperty(editor, 'setDecorations', { value: spySetDecorations });
+		} catch {
+			(editor as unknown as { setDecorations: typeof spySetDecorations }).setDecorations = spySetDecorations;
+		}
+
+		try {
+			const decorator = new DocstringDecorator();
+			decorator.applyDecorations(editor);
+
+			const lineNum = 1;
+			const lineText = doc.lineAt(lineNum).text;
+			const colonIndex = lineText.lastIndexOf(':');
+			assert.ok(colonIndex > 0, 'Expected trailing colon in heading line');
+
+			const rangeKey = (r: vscode.Range) =>
+				`${r.start.line}:${r.start.character}-${r.end.line}:${r.end.character}`;
+
+			const expectedColon = new vscode.Range(lineNum, colonIndex, lineNum, colonIndex + 1); // :
+
+			const allRanges = calls.flatMap((c) => Array.from(c.ranges));
+			const actualKeys = allRanges.map(rangeKey);
+
+			assert.ok(
+				actualKeys.includes(rangeKey(expectedColon)),
+				`Expected heading colon to be bolded as a 1-char range: ${rangeKey(expectedColon)}`
+			);
+		} finally {
+			try {
+				Object.defineProperty(editor, 'setDecorations', { value: originalSetDecorations });
+			} catch {
+				(editor as unknown as { setDecorations: typeof originalSetDecorations }).setDecorations = originalSetDecorations;
+			}
+		}
+	});
+
 	test('Does not apply MARK separator line to plain // MARK: (no dash)', async () => {
 		const config = vscode.workspace.getConfiguration('xcodeComments');
 		await config.update('markSeparatorLines', true, true);
@@ -623,6 +674,27 @@ suite('Extension Test Suite', () => {
 		// If the block were merged, it would reflow into a single line and produce an edit.
 		const edits = computeWrapCommentsReplaceEdits(lines, 100, '\n', false);
 		assert.strictEqual(edits.length, 0);
+	});
+
+	test('Does not merge across non-list /// heading lines ending with a colon (e.g. Notes:)', () => {
+		const lines = [
+			'/// This is a very long doc comment paragraph that should be wrapped into multiple lines for readability.',
+			'/// Implementation Notes:',
+			'/// This is another long paragraph that should wrap, but never merge into the heading line.',
+		];
+
+		const edits = computeWrapCommentsReplaceEdits(lines, 60, '\n', false);
+		assert.strictEqual(edits.length, 1);
+
+		const wrapped = edits[0].text.split('\n');
+		assert.ok(wrapped.includes('/// Implementation Notes:'), 'Expected heading line to be preserved verbatim.');
+
+		const headingMentions = wrapped.filter((l) => l.includes('Implementation Notes:'));
+		assert.deepStrictEqual(
+			headingMentions,
+			['/// Implementation Notes:'],
+			'Expected heading text to appear only on the standalone heading line.'
+		);
 	});
 
 	test('Does not wrap markdown bullet list blocks', () => {

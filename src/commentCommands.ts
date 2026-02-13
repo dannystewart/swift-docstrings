@@ -10,7 +10,7 @@ export interface ReplaceEdit {
 	text: string;
 }
 
-import { findLeadingCapsLabel } from './capsLabel';
+import { findDocColonHeading, findLeadingCapsLabel } from './capsLabel';
 
 type CommentPrefix = '//' | '///';
 
@@ -521,6 +521,15 @@ function wrapCommentBlock(
 				}
 
 				i = j - 1;
+				continue;
+			}
+
+			// Treat non-list "heading:" lines (e.g. "/// Notes:") as hard boundaries and
+			// preserve them verbatim. This ensures wrapping doesn't merge paragraphs into headings.
+			if (!isMarkdownListItem(afterTrimStart) && findDocColonHeading(after)) {
+				flushParagraph(paragraph);
+				listMode = false;
+				output.push(p.originalLine);
 				continue;
 			}
 		}

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findLeadingCapsLabel } from './capsLabel';
+import { findDocColonHeading, findLeadingCapsLabel } from './capsLabel';
 
 // Matches a line that is a /// doc comment.
 // Group 1: leading whitespace
@@ -38,6 +38,9 @@ const KNOWN_TAGS = new Set([
 
 // Captures leading whitespace from the text after ///.
 const leadingSpaceRegex = /^(\s+)/;
+
+const docListBulletRegex = /^([-*+])\s+/;
+const docListNumberRegex = /^(\d+)([.)])\s+/;
 
 interface DocCommentSegments {
     slashRange: vscode.Range;
@@ -323,6 +326,35 @@ export class DocstringDecorator {
             // Bold the colon too, without bolding any whitespace that might precede it.
             const absColonStart = afterPrefixStart + match.colonIndex;
             capsLabelRanges.push(new vscode.Range(i, absColonStart, i, absColonStart + 1));
+        }
+
+        // Bold non-list doc "section heading" lines that end with a colon, e.g. "/// Notes:".
+        // This is intentionally separate from the all-caps callout label scan.
+        for (let i = 0; i < document.lineCount; i++) {
+            const line = document.lineAt(i);
+            const match = docLineRegex.exec(line.text);
+            if (!match) continue;
+
+            const afterPrefix = match[3] ?? '';
+            const afterTrimStart = afterPrefix.trimStart();
+            if (docListBulletRegex.test(afterTrimStart) || docListNumberRegex.test(afterTrimStart)) {
+                continue;
+            }
+
+            const heading = findDocColonHeading(afterPrefix);
+            if (!heading) continue;
+
+            const indentLen = match[1].length;
+            const afterPrefixStart = indentLen + 3; // after ///
+
+            const absHeadingStart = afterPrefixStart + heading.headingStart;
+            const absHeadingEnd = afterPrefixStart + heading.headingEnd;
+            if (absHeadingEnd > absHeadingStart) {
+                boldRanges.push(new vscode.Range(i, absHeadingStart, i, absHeadingEnd));
+            }
+
+            const absColonStart = afterPrefixStart + heading.colonIndex;
+            boldRanges.push(new vscode.Range(i, absColonStart, i, absColonStart + 1));
         }
 
         editor.setDecorations(this.slashDecoration, slashRanges);
