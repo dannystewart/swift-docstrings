@@ -32,6 +32,10 @@
       {
         "command": "xcodeComments.titleCaseMarkComments",
         "title": "Xcode Comments: Title Case // MARK: lines in the current file"
+      },
+      {
+        "command": "xcodeComments.titleCaseMarkCommentsInWorkspace",
+        "title": "Xcode Comments: Title Case // MARK: lines in the entire workspace"
       }
     ],
     "configuration": {

@@ -4,6 +4,7 @@ import * as assert from 'assert';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { DocstringDecorator } from '../decorator';
+import { activate } from '../extension';
 import {
 	computeConvertLineCommentsToDocCommentInserts,
 	computeTitleCaseMarkCommentsReplaceEdits,
@@ -598,5 +599,26 @@ suite('Extension Test Suite', () => {
 
 		const edits = computeWrapCommentsReplaceEdits(lines, 40, '\n', false);
 		assert.strictEqual(edits.length, 0);
+	});
+
+	test('Registers workspace-wide MARK Title Case command', async () => {
+		const context = { subscriptions: [] as vscode.Disposable[] } as unknown as vscode.ExtensionContext;
+		activate(context);
+
+		try {
+			const commands = await vscode.commands.getCommands(true);
+			assert.ok(
+				commands.includes('xcodeComments.titleCaseMarkCommentsInWorkspace'),
+				'Expected workspace-wide MARK Title Case command to be registered.'
+			);
+		} finally {
+			for (const d of context.subscriptions) {
+				try {
+					d.dispose();
+				} catch {
+					// ignore
+				}
+			}
+		}
 	});
 });
