@@ -83,8 +83,7 @@ export function computeWrapCommentsReplaceEdits(
 	lines: readonly string[],
 	maxLineLength: number,
 	eol: '\n' | '\r\n',
-	wrapCountFromCommentStart = false,
-	avoidWrappingAtPunctuationBreaks = false
+	wrapCountFromCommentStart = false
 ): ReplaceEdit[] {
 	const edits: ReplaceEdit[] = [];
 	const clampMax = Math.max(MIN_WRAP_LINE_LENGTH, Math.floor(maxLineLength || 0) || 0);
@@ -107,12 +106,7 @@ export function computeWrapCommentsReplaceEdits(
 
 		const blockEndInclusive = j - 1;
 		const blockLines = lines.slice(blockStart, j);
-		const wrapped = wrapCommentBlock(
-			blockLines,
-			clampMax,
-			wrapCountFromCommentStart,
-			avoidWrappingAtPunctuationBreaks
-		);
+		const wrapped = wrapCommentBlock(blockLines, clampMax, wrapCountFromCommentStart);
 
 		const same =
 			wrapped.length === blockLines.length && wrapped.every((l, idx) => l === blockLines[idx]);
@@ -350,8 +344,7 @@ function titleCaseMarkToken(
 function wrapCommentBlock(
 	blockLines: readonly string[],
 	maxLineLength: number,
-	wrapCountFromCommentStart: boolean,
-	avoidWrappingAtPunctuationBreaks: boolean
+	wrapCountFromCommentStart: boolean
 ): string[] {
 	const parts = blockLines.map(parseCommentLine);
 	if (parts.some((p) => !p)) {
@@ -385,12 +378,6 @@ function wrapCommentBlock(
 	};
 
 	const paragraph: string[] = [];
-
-	const endsWithSentencePunctuation = (text: string): boolean => {
-		const t = text.trimEnd();
-		// Sentence enders (. ? !) optionally followed by common closers: ) ] " '
-		return /[.!?][)\]"']*$/.test(t);
-	};
 
 	for (let i = 0; i < parts.length; i++) {
 		const p = parts[i] as CommentLineParts;
@@ -557,13 +544,6 @@ function wrapCommentBlock(
 
 		// Normal paragraph: collect content (drop a single leading space after prefix if present).
 		const normalized = after.startsWith(' ') ? after.substring(1) : after;
-		if (
-			avoidWrappingAtPunctuationBreaks &&
-			paragraph.length > 0 &&
-			endsWithSentencePunctuation(paragraph[paragraph.length - 1])
-		) {
-			flushParagraph(paragraph);
-		}
 		paragraph.push(normalized);
 	}
 

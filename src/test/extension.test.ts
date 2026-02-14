@@ -777,24 +777,6 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(edits.length, 0);
 	});
 
-	test('Does not merge across sentence punctuation breaks when enabled', () => {
-		const lines = ['// This is a thing.', '// It does something special.'];
-
-		// Without the punctuation-break behavior, this would merge into a single line and produce an edit.
-		const edits = computeWrapCommentsReplaceEdits(lines, 200, '\n', false, true);
-		assert.strictEqual(edits.length, 0);
-	});
-
-	test('Still merges when the line does not end with sentence punctuation (when enabled)', () => {
-		const lines = ['// This is a thing. It does', '// something special.'];
-
-		const edits = computeWrapCommentsReplaceEdits(lines, 200, '\n', false, true);
-		assert.strictEqual(edits.length, 1);
-		assert.strictEqual(edits[0].startLine, 0);
-		assert.strictEqual(edits[0].endLine, 1);
-		assert.strictEqual(edits[0].text, '// This is a thing. It does something special.');
-	});
-
 	test('Registers workspace-wide MARK Title Case command', async () => {
 		const context = { subscriptions: [] as vscode.Disposable[] } as unknown as vscode.ExtensionContext;
 		activate(context);

@@ -63,20 +63,10 @@ export function activate(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('xcodeComments');
             const maxLineLength = config.get<number>('maxCommentLineLength', 100);
             const wrapCountFromCommentStart = config.get<boolean>('wrapCountFromCommentStart', false);
-            const avoidWrappingAtPunctuationBreaks = config.get<boolean>(
-                'avoidWrappingAtPunctuationBreaks',
-                false
-            );
 
             const eol = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
             const lines = Array.from({ length: editor.document.lineCount }, (_, i) => editor.document.lineAt(i).text);
-            const replacements = computeWrapCommentsReplaceEdits(
-                lines,
-                maxLineLength,
-                eol,
-                wrapCountFromCommentStart,
-                avoidWrappingAtPunctuationBreaks
-            );
+            const replacements = computeWrapCommentsReplaceEdits(lines, maxLineLength, eol, wrapCountFromCommentStart);
 
             if (replacements.length === 0) {
                 await vscode.window.showInformationMessage('No comments needed wrapping.');
